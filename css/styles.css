@@ -1862,3 +1862,107 @@ button:hover:not(:disabled) svg.lucide {
     width: 14px;
     height: 14px;
 }
+
+/* ============================================
+   Selector Action Buttons (Arxiv / Guide)
+   ============================================ */
+
+#selector-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+#selector-actions button {
+    padding: 6px 12px;
+    gap: 5px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #f9fafb;
+    color: #4b5563;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+#selector-actions button:hover {
+    background: #0088aa;
+    color: #ffffff;
+    border-color: #0088aa;
+}
+
+#selector-actions button svg {
+    width: 18px;
+    height: 18px;
+}
+
+/* ============================================
+   Video Guide Popup
+   ============================================ */
+
+.video-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+
+.video-popup.hidden {
+    display: none;
+}
+
+.video-popup-content {
+    position: relative;
+    width: 80%;
+    max-width: 900px;
+}
+
+#video-popup-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: none;
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#video-popup-close:hover {
+    color: #d1d5db;
+}
+
+#video-popup-close svg.lucide {
+    width: 24px;
+    height: 24px;
+}
+
+.video-container {
+    position: relative;
+    padding-bottom: 56.25%; /* 16:9 aspect ratio */
+    height: 0;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
+.video-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}

@@ -2741,3 +2741,22 @@ document.getElementById('node-name-input').addEventListener('keydown', (e) => {
         hideNamePopup();
     }
 });
+
+// Video guide popup
+const videoPopup = document.getElementById('video-popup');
+const videoIframe = document.getElementById('video-iframe');
+
+document.getElementById('btn-guide').addEventListener('click', () => {
+    videoIframe.src = 'https://www.youtube.com/embed/ruLcDtr_cGo?si=T4z5NIIE67f0o9-5&autoplay=1';
+    videoPopup.classList.remove('hidden');
+});
+
+function closeVideoPopup() {
+    videoPopup.classList.add('hidden');
+    videoIframe.src = '';
+}
+
+document.getElementById('video-popup-close').addEventListener('click', closeVideoPopup);
+videoPopup.addEventListener('click', (e) => {
+    if (e.target === videoPopup) closeVideoPopup();
+});
