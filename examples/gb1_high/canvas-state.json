@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "timestamp": "2026-01-25T21:06:11.802Z",
+  "nodeIdCounter": 4,
+  "edgeIdCounter": 5,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 416,
+      "y": 196,
+      "latentIdx": 248,
+      "layer": 0,
+      "pos": 22,
+      "aa": "W",
+      "value": 10.9,
+      "isSuper": false,
+      "children": [],
+      "name": "W amino acids"
+    },
+    {
+      "id": 1,
+      "x": 276,
+      "y": 113,
+      "latentIdx": 3026,
+      "layer": 2,
+      "pos": 3,
+      "aa": "L",
+      "value": 1.24,
+      "isSuper": false,
+      "children": [],
+      "name": "Hydrophobic interactions"
+    },
+    {
+      "id": 2,
+      "x": 277,
+      "y": 17,
+      "latentIdx": 3028,
+      "layer": 5,
+      "pos": 18,
+      "aa": "A",
+      "value": 3.59,
+      "isSuper": false,
+      "children": [],
+      "name": "Inward facing residues"
+    },
+    {
+      "id": 3,
+      "x": 516,
+      "y": 17,
+      "latentIdx": 1609,
+      "layer": 5,
+      "pos": 22,
+      "aa": "W",
+      "value": 10.78,
+      "isSuper": false,
+      "children": [],
+      "name": "W amino acids"
+    }
+  ],
+  "edges": []
+}

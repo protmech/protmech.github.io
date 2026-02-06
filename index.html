@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProtoMech - Circuit tracing for proteins</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="img/favicon.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="img/favicon.png">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="stylesheet" href="css/styles.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <!-- File Upload Dropzone -->
+    <div id="upload-screen" class="hidden">
+        <div id="dropzone">
+            <div class="dropzone-icon">📁</div>
+            <h2>Drop Files Here</h2>
+            <p class="dropzone-subtitle">or click to select files</p>
+            <input type="file" id="file-input" multiple accept=".json,.txt" />
+            <div class="required-files">
+                <p>Required files:</p>
+                <div class="file-status" id="status-activation">
+                    <span class="status-icon">○</span>
+                    <span class="file-name">activation_indices.json</span>
+                </div>
+                <div class="file-status" id="status-seq">
+                    <span class="status-icon">○</span>
+                    <span class="file-name">seq.txt</span>
+                </div>
+                <div class="file-status" id="status-top">
+                    <span class="status-icon">○</span>
+                    <span class="file-name">top_activations.json</span>
+                </div>
+                <div class="file-status optional" id="status-virtual">
+                    <span class="status-icon">○</span>
+                    <span class="file-name">virtual_weights.json (optional)</span>
+                </div>
+            </div>
+            <button id="btn-load" disabled><i data-lucide="upload"></i> Load Data</button>
+        </div>
+    </div>
+
+    <div id="app">
+        <!-- Example Selector -->
+        <div id="example-selector">
+            <img src="img/logo.png" alt="Protein Circuit Tracing" id="site-logo">
+            <select id="example-dropdown">
+                <option value="">Loading examples...</option>
+            </select>
+            <button id="btn-load-custom"><i data-lucide="folder-open"></i> Load Custom Circuit</button>
+            <button id="btn-virtual-weights" disabled><span class="btn-icon">👁</span> Show virtual weights</button>
+
+            <div id="edge-filter-control">
+                <span class="filter-label">Filter Virtual Weights:</span>
+                <input type="range" id="edge-threshold-slider" min="0.01" max="100" step="0.01" value="10" />
+                <input type="number" id="edge-threshold-input" min="0.01" max="100" step="0.01" value="10" />
+                <span class="percent-sign">%</span>
+            </div>
+        </div>
+
+        <!-- Activation Detail Panel (hidden by default) -->
+        <div id="activation-panel" class="hidden">
+            <div id="activation-panel-header">
+                <h2 id="panel-title">Latent Activations</h2>
+                <button id="panel-close" aria-label="Close panel"><i data-lucide="x"></i></button>
+            </div>
+            <div id="activation-panel-content"></div>
+
+            
+        </div>
+
+        <!-- Layer Panel (hidden by default) -->
+        <div id="layer-panel" class="hidden">
+            <div id="layer-panel-header">
+                <h2 id="layer-panel-title">Layer Latent Rankings</h2>
+                <button id="layer-panel-close" aria-label="Close panel"><i data-lucide="x"></i></button>
+            </div>
+            <div id="layer-panel-content"></div>
+        </div>
+
+        <!-- Color Legend -->
+        <div id="color-legend" style="display: none;">
+            <span class="legend-label">Activation:</span>
+            <div class="legend-gradient"></div>
+            <span class="legend-min">Low</span>
+            <span class="legend-max">High</span>
+            
+        </div>
+
+        <!-- Grid Section -->
+        <div id="grid-container">
+            <div id="layer-labels">
+                <div class="layer-label">Layer 6</div>
+                <div class="layer-label">Layer 5</div>
+                <div class="layer-label">Layer 4</div>
+                <div class="layer-label">Layer 3</div>
+                <div class="layer-label">Layer 2</div>
+                <div class="layer-label">Layer 1</div>
+            </div>
+            <div id="grid-body"></div>
+            <svg id="grid-edges-svg"></svg>
+        </div>
+
+        <!-- Sequence Bar -->
+        <div id="sequence-bar">
+            <div id="sequence-content"></div>
+        </div>
+
+        <!-- Canvas Section -->
+        <div id="canvas-section">
+            <div id="canvas-toolbar">
+                <button id="btn-delete"><i data-lucide="trash-2"></i> Delete</button>
+                <button id="btn-save-canvas"><i data-lucide="save"></i> Save</button>
+                <button id="btn-load-canvas"><i data-lucide="folder-open"></i> Load</button>
+                <input type="file" id="canvas-file-input" accept=".json" style="display: none;" />
+                <button id="btn-save-svg"><i data-lucide="image-down"></i> Save Canvas as Image</button>
+                <button id="btn-fullscreen"><i data-lucide="maximize"></i> Fullscreen</button>
+            </div>
+
+            <div id="canvas-container">
+                <svg id="edges-svg"></svg>
+                <div id="nodes-container"></div>
+            </div>
+        </div>
+
+        
+    </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu" class="context-menu hidden">
+        <div class="context-menu-item" data-action="add-to-canvas">Add Node to Canvas</div>
+        <div class="context-menu-item" data-action="add-name">Add Name</div>
+        <div class="context-menu-item" data-action="delete">Delete</div>
+        <div class="context-menu-item" data-action="show-info">Show Latent Information</div>
+    </div>
+
+    <!-- Name Input Popup -->
+    <div id="name-popup" class="name-popup hidden">
+        <div class="name-popup-content">
+            <h3>Add Node Name</h3>
+            <input type="text" id="node-name-input" placeholder="Enter name...">
+            <div class="name-popup-buttons">
+                <button id="name-popup-cancel"><i data-lucide="x"></i> Cancel</button>
+                <button id="name-popup-save"><i data-lucide="check"></i> Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>

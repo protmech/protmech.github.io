@@ -1,0 +1,6 @@
+id,circuit_name,path
+1,"Protein Kinase Domain","examples/kinase/"
+2,"NADP+ Binding Domain","examples/nadp_binding/"
+3,"GB1 Wildtype","examples/gb1_wildtype/"
+4,"GB1 High Fitness","examples/gb1_high/"
+5,"GB1 Low Fitness","examples/gb1_low/"
