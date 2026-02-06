@@ -314,7 +314,8 @@ function handleFiles(files) {
 function updateLoadButton() {
     const allLoaded = uploadedFiles.activationIndices &&
                       uploadedFiles.seq &&
-                      uploadedFiles.topActivations;
+                      uploadedFiles.topActivations &&
+                      uploadedFiles.virtualWeights;
     btnLoad.disabled = !allLoaded;
 }
 
@@ -336,13 +337,9 @@ btnLoad.addEventListener('click', async (e) => {
         const filePromises = [
             uploadedFiles.activationIndices.text(),
             uploadedFiles.seq.text(),
-            uploadedFiles.topActivations.text()
+            uploadedFiles.topActivations.text(),
+            uploadedFiles.virtualWeights.text()
         ];
-
-        // Add optional virtual weights file if present
-        if (uploadedFiles.virtualWeights) {
-            filePromises.push(uploadedFiles.virtualWeights.text());
-        }
 
         const results = await Promise.all(filePromises);
         const [activationsText, seqText, topActivationsText] = results;
