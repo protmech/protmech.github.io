@@ -2748,6 +2748,10 @@ document.getElementById('btn-guide').addEventListener('click', () => {
     videoPopup.classList.remove('hidden');
 });
 
+document.getElementById('btn-github').addEventListener('click', () => {
+    window.open('https://github.com/amirgroup-codes/ProtoMech/tree/main', '_blank');
+});
+
 function closeVideoPopup() {
     videoPopup.classList.add('hidden');
     videoIframe.src = '';
