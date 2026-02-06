@@ -318,7 +318,8 @@ function updateLoadButton() {
     btnLoad.disabled = !allLoaded;
 }
 
-btnLoad.addEventListener('click', async () => {
+btnLoad.addEventListener('click', async (e) => {
+    e.stopPropagation();
     if (btnLoad.disabled) return;
 
     try {
