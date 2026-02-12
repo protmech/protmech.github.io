@@ -2744,7 +2744,7 @@ const videoPopup = document.getElementById('video-popup');
 const videoIframe = document.getElementById('video-iframe');
 
 document.getElementById('btn-guide').addEventListener('click', () => {
-    videoIframe.src = 'https://www.youtube.com/embed/ruLcDtr_cGo?si=T4z5NIIE67f0o9-5&autoplay=1';
+    videoIframe.src = 'https://www.youtube.com/embed/wF6xUQDxu1w?autoplay=1';
     videoPopup.classList.remove('hidden');
 });
 

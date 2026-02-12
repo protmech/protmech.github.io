@@ -1966,3 +1966,19 @@ button:hover:not(:disabled) svg.lucide {
     width: 100%;
     height: 100%;
 }
+
+.video-colab-text {
+    color: #d1d5db;
+    font-size: 14px;
+    margin-top: 12px;
+    text-align: center;
+}
+
+.video-colab-text a {
+    color: #60a5fa;
+    text-decoration: underline;
+}
+
+.video-colab-text a:hover {
+    color: #93bbfd;
+}
