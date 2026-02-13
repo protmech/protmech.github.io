@@ -2748,6 +2748,10 @@ document.getElementById('btn-guide').addEventListener('click', () => {
     videoPopup.classList.remove('hidden');
 });
 
+document.getElementById('btn-arxiv').addEventListener('click', () => {
+    window.open('https://arxiv.org/pdf/2602.12026', '_blank');
+});
+
 document.getElementById('btn-github').addEventListener('click', () => {
     window.open('https://github.com/amirgroup-codes/ProtoMech/tree/main', '_blank');
 });
