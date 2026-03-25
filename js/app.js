@@ -37,6 +37,7 @@ const statusVirtual = document.getElementById('status-virtual');
 const appContainer = document.getElementById('app');
 
 // Example selector elements
+const modelDropdown = document.getElementById('model-dropdown');
 const exampleDropdown = document.getElementById('example-dropdown');
 const btnLoadCustom = document.getElementById('btn-load-custom');
 let examplesData = [];  // Store loaded examples
@@ -55,12 +56,13 @@ async function loadExamplesCSV() {
             if (!line) continue;
 
             // Parse CSV line (handle quoted values)
-            const match = line.match(/(\d+),\s*"([^"]+)",\s*"([^"]+)"/);
+            const match = line.match(/(\d+),\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"/);
             if (match) {
                 examples.push({
                     id: match[1],
                     name: match[2],
-                    path: match[3]
+                    path: match[3],
+                    model: match[4]
                 });
             }
         }
@@ -77,12 +79,14 @@ async function loadExamplesCSV() {
         }
 
         examplesData = examples;
-        populateExampleDropdown(examples);
+        populateModelDropdown(examples);
+        populateExampleDropdown();
 
-        // Auto-load first example
-        if (examples.length > 0) {
-            exampleDropdown.value = examples[0].path;
-            await loadExampleData(examples[0].path);
+        // Auto-load first example from selected model
+        const filtered = getFilteredExamples();
+        if (filtered.length > 0) {
+            exampleDropdown.value = filtered[0].path;
+            await loadExampleData(filtered[0].path);
         }
     } catch (err) {
         console.error('Error loading examples CSV:', err);
@@ -90,11 +94,36 @@ async function loadExamplesCSV() {
     }
 }
 
-// Populate dropdown with examples
-function populateExampleDropdown(examples) {
+// Populate model dropdown with unique model names (12-layer first)
+function populateModelDropdown(examples) {
+    const models = [...new Set(examples.map(e => e.model))];
+    // Sort so higher layer count comes first
+    models.sort((a, b) => {
+        const aNum = parseInt(a.match(/(\d+)\s*layer/)?.[1] || '0');
+        const bNum = parseInt(b.match(/(\d+)\s*layer/)?.[1] || '0');
+        return bNum - aNum;
+    });
+    modelDropdown.innerHTML = '';
+    for (const model of models) {
+        const option = document.createElement('option');
+        option.value = model;
+        option.textContent = model;
+        modelDropdown.appendChild(option);
+    }
+}
+
+// Get examples filtered by selected model
+function getFilteredExamples() {
+    const selectedModel = modelDropdown.value;
+    return examplesData.filter(e => e.model === selectedModel);
+}
+
+// Populate dropdown with examples filtered by current model
+function populateExampleDropdown() {
+    const filtered = getFilteredExamples();
     exampleDropdown.innerHTML = '<option value="">Select an example circuit...</option>';
 
-    for (const example of examples) {
+    for (const example of filtered) {
         const option = document.createElement('option');
         option.value = example.path;
 
@@ -109,6 +138,23 @@ function populateExampleDropdown(examples) {
     }
 }
 
+// Load virtual weights, supporting both single-file and chunked formats
+async function loadVirtualWeights(path) {
+    try {
+        const manifestResp = await fetch(path + 'virtual_weights_manifest.json');
+        if (manifestResp.ok) {
+            const manifest = await manifestResp.json();
+            const parts = await Promise.all(
+                Array.from({length: manifest.parts}, (_, i) =>
+                    fetch(path + `virtual_weights_part${i}.json`).then(r => r.json())
+                )
+            );
+            return JSON.stringify(parts.flat());
+        }
+    } catch (e) {}
+    return fetch(path + 'virtual_weights.json').then(r => r.ok ? r.text() : null).catch(() => null);
+}
+
 // Load example data from path
 async function loadExampleData(path) {
     try {
@@ -120,7 +166,7 @@ async function loadExampleData(path) {
             fetch(path + 'activation_indices.json').then(r => r.text()),
             fetch(path + 'seq.txt').then(r => r.text()),
             fetch(path + 'top_activations.json').then(r => r.text()),
-            fetch(path + 'virtual_weights.json').then(r => r.ok ? r.text() : null).catch(() => null),
+            loadVirtualWeights(path),
             fetch(path + 'canvas-state.json').then(r => r.ok ? r.text() : null).catch(() => null)
         ]);
 
@@ -164,6 +210,7 @@ async function loadExampleData(path) {
         }
 
         // Render the visualization
+        renderLayerLabels();
         renderGrid();
         renderSequence();
         updateLegend();
@@ -224,6 +271,16 @@ function resetAppState() {
     //     edgeFilterControl.classList.add('hidden');
     // }
 }
+
+// Handle model dropdown change
+modelDropdown.addEventListener('change', async () => {
+    populateExampleDropdown();
+    const filtered = getFilteredExamples();
+    if (filtered.length > 0) {
+        exampleDropdown.value = filtered[0].path;
+        await loadExampleData(filtered[0].path);
+    }
+});
 
 // Handle dropdown change
 exampleDropdown.addEventListener('change', async (e) => {
@@ -385,6 +442,7 @@ btnLoad.addEventListener('click', async (e) => {
         uploadScreen.classList.add('hidden');
 
         // Render the visualization
+        renderLayerLabels();
         renderGrid();
         renderSequence();
         updateLegend();
@@ -467,6 +525,25 @@ function getValueRange() {
     return { min, max };
 }
 
+// Render layer labels dynamically based on loaded data
+function renderLayerLabels() {
+    const numLayers = Object.keys(activationData).length;
+    const layerLabelsContainer = document.getElementById('layer-labels');
+    let html = '';
+    for (let layer = numLayers - 1; layer >= 0; layer--) {
+        html += `<div class="layer-label" data-layer="${layer}">Layer ${layer + 1}</div>`;
+    }
+    layerLabelsContainer.innerHTML = html;
+
+    // Attach click handlers
+    layerLabelsContainer.querySelectorAll('.layer-label').forEach(label => {
+        label.addEventListener('click', () => {
+            const layer = parseInt(label.dataset.layer);
+            showLayerPanel(layer);
+        });
+    });
+}
+
 // Update legend with actual min/max values
 function updateLegend() {
     const { min, max } = getValueRange();
@@ -481,7 +558,8 @@ function computeColumnWidths() {
     const numPositions = sequence.length;
     const maxLatentsPerPos = new Array(numPositions).fill(0);
 
-    for (let layer = 0; layer <= 5; layer++) {
+    const numLayers = Object.keys(activationData).length;
+    for (let layer = 0; layer < numLayers; layer++) {
         for (let pos = 0; pos < numPositions; pos++) {
             const items = activationData[layer]?.[pos] || [];
             maxLatentsPerPos[pos] = Math.max(maxLatentsPerPos[pos], items.length);
@@ -502,8 +580,9 @@ function renderGrid() {
     const cellPaddingAndBorder = 21; // 20px padding (10px each side) + 1px border
 
     let html = '';
-    // Each row is a layer (reversed: 5 to 0)
-    for (let layer = 5; layer >= 0; layer--) {
+    const numLayers = Object.keys(activationData).length;
+    // Each row is a layer (reversed: top to 0)
+    for (let layer = numLayers - 1; layer >= 0; layer--) {
         html += `<div class="grid-row" data-layer="${layer}">`;
         // Each column is a position
         for (let pos = 0; pos < numPositions; pos++) {
@@ -1409,15 +1488,6 @@ layerPanelContent.addEventListener('mousemove', moveAATooltip);
 // ============================================
 // Layer Panel - Latent Rankings by Max Activation
 // ============================================
-
-// Setup layer label click handlers
-document.querySelectorAll('.layer-label').forEach((label, index) => {
-    label.addEventListener('click', () => {
-        // Labels are ordered 5 to 0 in the DOM
-        const layer = 5 - index;
-        showLayerPanel(layer);
-    });
-});
 
 // Show layer panel with latent rankings for a specific layer
 function showLayerPanel(layer) {

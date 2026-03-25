@@ -159,6 +159,26 @@ body {
     border-bottom: 1px solid #d1d5db;
 }
 
+#model-dropdown {
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #1a1a2e;
+    background: #f9fafb;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+}
+
+#model-dropdown:hover {
+    border-color: #0088aa;
+}
+
+#model-dropdown:focus {
+    border-color: #0088aa;
+    box-shadow: 0 0 0 2px rgba(0, 136, 170, 0.2);
+}
+
 #example-dropdown {
     flex: 1;
     max-width: 500px;

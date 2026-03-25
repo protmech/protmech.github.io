@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "timestamp": "2026-01-24T21:45:38.232Z",
+  "nodeIdCounter": 1,
+  "edgeIdCounter": 0,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 282,
+      "y": 61,
+      "latentIdx": 3026,
+      "layer": 2,
+      "pos": 3,
+      "aa": "L",
+      "value": 1.28,
+      "isSuper": false,
+      "children": [],
+      "name": "Hydrophobic interactions"
+    }
+  ],
+  "edges": []
+}
