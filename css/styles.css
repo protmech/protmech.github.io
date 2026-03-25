@@ -944,7 +944,7 @@ body {
     overflow-x: auto;
     overflow-y: auto;
     max-height: calc(100vh - 200px);
-    padding: 16px;
+    padding: 16px 16px 16px 0;
 }
 
 /* Alignment Row */
@@ -962,16 +962,25 @@ body {
     margin-bottom: 8px;
 }
 
+.alignment-row.wild-type-row .alignment-label {
+    background: #e5f3f6;
+}
+
 .alignment-row.ruler-row {
     margin-bottom: 8px;
     border-bottom: 1px solid #d1d5db;
     padding-bottom: 8px;
 }
 
+.alignment-row.ruler-row .alignment-label {
+    background: #f9fafb;
+}
+
 /* Alignment Label */
 .alignment-label {
     min-width: 220px;
     max-width: 220px;
+    padding-left: 16px;
     padding-right: 12px;
     display: flex;
     align-items: center;
@@ -979,6 +988,10 @@ body {
     font-size: 12px;
     color: #4a5568;
     flex-shrink: 0;
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: #f9fafb;
 }
 
 .alignment-entry {
