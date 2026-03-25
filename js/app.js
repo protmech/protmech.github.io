@@ -14,6 +14,7 @@ let virtualWeightsVisible = false;  // Toggle state for virtual weights
 let virtualWeightsEdges = [];       // Edges created from virtual weights
 let aggregatedVirtualWeights = new Map();  // Averaged weights by (layer, latent) pairs
 let virtualWeightsThreshold = 10;  // Show top x% of edges by absolute magnitude
+let positionOffset = 0;  // User-defined offset for amino acid position numbering
 let gridEdgeTooltip = null;  // Tooltip for virtual weight edges
 
 // File upload state
@@ -546,7 +547,7 @@ function renderSequence() {
         const width = widths[i] || 36;
         html += `<div class="seq-item" data-pos="${i}" style="width: ${width}px; min-width: ${width}px;">
             <span class="seq-aa">${sequence[i]}</span>
-            <span class="seq-pos">${i + 1}</span>
+            <span class="seq-pos">${displayPos(i)}</span>
         </div>`;
     }
     sequenceContent.innerHTML = html;
@@ -626,7 +627,7 @@ function renderWildTypeCard(layer, latentIdx, clickedPos, clickedValue) {
             <div class="clicked-position-info">
                 <div class="clicked-label">Current Position</div>
                 <div class="clicked-details">
-                    <span class="clicked-pos">Position ${clickedPos + 1}</span>
+                    <span class="clicked-pos">Position ${displayPos(clickedPos)}</span>
                     <span class="clicked-aa">${sequence[clickedPos]}</span>
                     <span class="clicked-activation">Activation: ${clickedValue.toFixed(3)}</span>
                 </div>
@@ -1497,7 +1498,7 @@ function renderLayerPanelContent(layer, latentMaxActivations) {
                     <div class="latent-rank-info">
                         <span class="latent-rank-idx">Latent ${latentIdx + 1}</span>
                         <span class="latent-rank-max">Max: ${maxVal.toFixed(3)}</span>
-                        <span class="latent-rank-pos">@ Pos ${maxPos + 1} (${aa})</span>
+                        <span class="latent-rank-pos">@ Pos ${displayPos(maxPos)} (${aa})</span>
                     </div>
                     <div class="latent-rank-actions">
                         <button class="btn-add-to-canvas" title="Add node to canvas">Add to Canvas</button>
@@ -2228,6 +2229,15 @@ document.addEventListener('keydown', (e) => {
 // Virtual Weights Visualization (Grid-based)
 // ============================================
 
+// Position offset control
+function displayPos(pos) { return pos + 1 + positionOffset; }
+
+const offsetInput = document.getElementById('offset-input');
+offsetInput.addEventListener('input', () => {
+    positionOffset = parseInt(offsetInput.value) || 0;
+    renderSequence();
+});
+
 const btnVirtualWeights = document.getElementById('btn-virtual-weights');
 const gridEdgesSvg = document.getElementById('grid-edges-svg');
 const edgeFilterControl = document.getElementById('edge-filter-control');
@@ -2448,8 +2458,8 @@ function createGridEdgeTooltip() {
 function showGridEdgeTooltip(e) {
     const tooltip = createGridEdgeTooltip();
     const weight = e.target.dataset.weight;
-    const srcInfo = `L${parseInt(e.target.dataset.srcLayer) + 1}/P${parseInt(e.target.dataset.srcPos) + 1}/F${parseInt(e.target.dataset.srcFeature) + 1}`;
-    const tgtInfo = `L${parseInt(e.target.dataset.tgtLayer) + 1}/P${parseInt(e.target.dataset.tgtPos) + 1}/F${parseInt(e.target.dataset.tgtFeature) + 1}`;
+    const srcInfo = `L${parseInt(e.target.dataset.srcLayer) + 1}/P${displayPos(parseInt(e.target.dataset.srcPos))}/F${parseInt(e.target.dataset.srcFeature) + 1}`;
+    const tgtInfo = `L${parseInt(e.target.dataset.tgtLayer) + 1}/P${displayPos(parseInt(e.target.dataset.tgtPos))}/F${parseInt(e.target.dataset.tgtFeature) + 1}`;
 
     tooltip.innerHTML = `
         <div class="edge-tooltip-weight">Weight: ${weight}</div>
