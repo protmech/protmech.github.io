@@ -854,7 +854,7 @@ function renderAlignmentTab() {
             const latentData = layerData[latentIdx.toString()];
             if (latentData && latentData.length > 0) {
                 latentData.forEach((item, idx) => {
-                    const maxIdx = findMaxActivationIndex(item.Activations);
+                    const maxIdx = findMaxActivationIndex(item.Activations, item.Sequence.length);
                     sequencesToAlign.push({
                         name: item['Entry Name'] || 'Unknown',
                         entry: item.Entry || 'N/A',
@@ -1118,10 +1118,11 @@ function attachInfluenceListeners() {
 }
 
 // Find the index of max activation in an array
-function findMaxActivationIndex(activations) {
+function findMaxActivationIndex(activations, maxLength) {
     let maxVal = -Infinity;
     let maxIdx = 0;
-    for (let i = 0; i < activations.length; i++) {
+    const len = maxLength || activations.length;
+    for (let i = 0; i < len; i++) {
         if (activations[i] > maxVal) {
             maxVal = activations[i];
             maxIdx = i;
