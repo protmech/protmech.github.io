@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "timestamp": "2026-03-26T02:23:03.181Z",
+  "nodeIdCounter": 9,
+  "edgeIdCounter": 21,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 324,
+      "y": 128,
+      "latentIdx": 1608,
+      "layer": 5,
+      "pos": 39,
+      "aa": "A",
+      "value": 5.29185676574707,
+      "isSuper": false,
+      "children": [],
+      "name": "Rossman fold binding sites"
+    },
+    {
+      "id": 1,
+      "x": 465,
+      "y": 3,
+      "latentIdx": 533,
+      "layer": 9,
+      "pos": 146,
+      "aa": "N",
+      "value": 8.113912582397461,
+      "isSuper": false,
+      "children": [],
+      "name": "NADP+/FAD binding"
+    },
+    {
+      "id": 3,
+      "x": 593,
+      "y": 71,
+      "latentIdx": 4231,
+      "layer": 6,
+      "pos": 36,
+      "aa": "G",
+      "value": 0.61,
+      "isSuper": false,
+      "children": [],
+      "name": "NADP+ binding sites"
+    },
+    {
+      "id": 8,
+      "x": 548,
+      "y": 200,
+      "latentIdx": 1177,
+      "layer": 0,
+      "pos": 151,
+      "aa": "W",
+      "value": 3.5568532943725586,
+      "isSuper": false,
+      "children": [],
+      "name": "W amino acids"
+    }
+  ],
+  "edges": []
+}

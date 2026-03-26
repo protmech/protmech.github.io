@@ -149,7 +149,8 @@ async function loadVirtualWeights(path) {
                     fetch(path + `virtual_weights_part${i}.json`).then(r => r.json())
                 )
             );
-            return JSON.stringify(parts.flat());
+            // Return already-parsed array directly
+            return parts.flat();
         }
     } catch (e) {}
     return fetch(path + 'virtual_weights.json').then(r => r.ok ? r.text() : null).catch(() => null);
@@ -157,6 +158,8 @@ async function loadVirtualWeights(path) {
 
 // Load example data from path
 async function loadExampleData(path) {
+    const loadingOverlay = document.getElementById('loading-overlay');
+    loadingOverlay.classList.remove('hidden');
     try {
         // Reset state
         resetAppState();
@@ -174,9 +177,9 @@ async function loadExampleData(path) {
         sequence = seqText.trim();
         topActivationsData = JSON.parse(topActivationsText);
 
-        // Parse virtual weights if present
+        // Parse virtual weights if present (may be pre-parsed array from chunked loading or text)
         if (virtualWeightsText) {
-            virtualWeightsData = JSON.parse(virtualWeightsText);
+            virtualWeightsData = Array.isArray(virtualWeightsText) ? virtualWeightsText : JSON.parse(virtualWeightsText);
             preprocessVirtualWeights();
             const btnVirtualWeights = document.getElementById('btn-virtual-weights');
             if (btnVirtualWeights) {
@@ -234,6 +237,8 @@ async function loadExampleData(path) {
     } catch (err) {
         console.error('Error loading example data:', err);
         alert('Error loading example. Please try another or load a custom circuit.');
+    } finally {
+        loadingOverlay.classList.add('hidden');
     }
 }
 
@@ -381,9 +386,11 @@ btnLoad.addEventListener('click', async (e) => {
     e.stopPropagation();
     if (btnLoad.disabled) return;
 
+    const loadingOverlay = document.getElementById('loading-overlay');
     try {
         btnLoad.textContent = 'Loading...';
         btnLoad.disabled = true;
+        loadingOverlay.classList.remove('hidden');
 
         // Reset app state for fresh load
         resetAppState();
@@ -463,6 +470,8 @@ btnLoad.addEventListener('click', async (e) => {
         alert('Error loading files. Please make sure all files are valid.');
         btnLoad.textContent = 'Load Data';
         updateLoadButton();
+    } finally {
+        loadingOverlay.classList.add('hidden');
     }
 });
 
@@ -2308,9 +2317,20 @@ offsetInput.addEventListener('input', () => {
     renderSequence();
 });
 
+// Settings popup toggle
+const settingsPopup = document.getElementById('settings-popup');
+document.getElementById('btn-settings').addEventListener('click', () => {
+    settingsPopup.classList.remove('hidden');
+});
+document.getElementById('settings-popup-close').addEventListener('click', () => {
+    settingsPopup.classList.add('hidden');
+});
+settingsPopup.addEventListener('click', (e) => {
+    if (e.target === settingsPopup) settingsPopup.classList.add('hidden');
+});
+
 const btnVirtualWeights = document.getElementById('btn-virtual-weights');
 const gridEdgesSvg = document.getElementById('grid-edges-svg');
-const edgeFilterControl = document.getElementById('edge-filter-control');
 const edgeThresholdSlider = document.getElementById('edge-threshold-slider');
 const edgeThresholdInput = document.getElementById('edge-threshold-input');
 
@@ -2324,11 +2344,9 @@ btnVirtualWeights.addEventListener('click', () => {
     // Update button text and icon
     if (virtualWeightsVisible) {
         btnVirtualWeights.innerHTML = '<span class="btn-icon">👁</span> Hide virtual weights';
-        edgeFilterControl.classList.remove('hidden');
         renderVirtualWeightsInGrid();
     } else {
         btnVirtualWeights.innerHTML = '<span class="btn-icon">👁</span> Show virtual weights';
-        edgeFilterControl.classList.add('hidden');
         clearVirtualWeightsFromGrid();
     }
 });

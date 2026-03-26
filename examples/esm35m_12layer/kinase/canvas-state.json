@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "timestamp": "2026-03-25T20:49:54.160Z",
+  "nodeIdCounter": 8,
+  "edgeIdCounter": 21,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 283,
+      "y": 122,
+      "latentIdx": 1282,
+      "layer": 2,
+      "pos": 130,
+      "aa": "H",
+      "value": 6.6482038497924805,
+      "isSuper": false,
+      "children": [],
+      "name": "HRD motif active site"
+    },
+    {
+      "id": 1,
+      "x": 396,
+      "y": 192,
+      "latentIdx": 140,
+      "layer": 0,
+      "pos": 292,
+      "aa": "H",
+      "value": 3.527688503265381,
+      "isSuper": false,
+      "children": [],
+      "name": "H amino acids"
+    },
+    {
+      "id": 2,
+      "x": 585,
+      "y": 88,
+      "latentIdx": 1153,
+      "layer": 5,
+      "pos": 151,
+      "aa": "D",
+      "value": 8.23,
+      "isSuper": false,
+      "children": [],
+      "name": "DFG motif regulator"
+    },
+    {
+      "id": 5,
+      "x": 456,
+      "y": 8,
+      "latentIdx": 1627,
+      "layer": 11,
+      "pos": 173,
+      "aa": "A",
+      "value": 22.18,
+      "isSuper": false,
+      "children": [],
+      "name": "APE motif binding site"
+    },
+    {
+      "id": 6,
+      "x": 573,
+      "y": 193,
+      "latentIdx": 4290,
+      "layer": 0,
+      "pos": 211,
+      "aa": "P",
+      "value": 3.588482141494751,
+      "isSuper": false,
+      "children": [],
+      "name": "P amino acids"
+    },
+    {
+      "id": 7,
+      "x": 369,
+      "y": 59,
+      "latentIdx": 113,
+      "layer": 7,
+      "pos": 1,
+      "aa": "V",
+      "value": 0.23,
+      "isSuper": false,
+      "children": [],
+      "name": "β1 strand"
+    }
+  ],
+  "edges": []
+}
