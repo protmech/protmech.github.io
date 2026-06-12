@@ -17,13 +17,39 @@ let virtualWeightsThreshold = 10;  // Show top x% of edges by absolute magnitude
 let positionOffset = 0;  // User-defined offset for amino acid position numbering
 let gridEdgeTooltip = null;  // Tooltip for virtual weight edges
 
+// CLM analysis state
+let analysisType = 'zero-shot';  // 'CLM' | 'zero-shot'
+let logitsData = null;            // Float32Array (rows * cols flat)
+let logitsShape = null;           // [rows, cols]
+let clmStart = 0;                 // position where <CLM>/<GLM> begins in fullSequence
+let numGenerated = 0;             // generated.length
+let topLogitsByPos = null;        // Map<pos, [{idx, value}, ...]> length 5
+let markerLabel = '<CLM>';        // actual marker text from generation.fasta — '<CLM>' or '<GLM>'
+
+// ProGen2 BPE vocab (indices 0-33). Indices outside this range render as "<id:N>".
+const PROGEN2_VOCAB = [
+    '<pad>', '<bos>', '<eos>', '<bos_glm>', '<eos_span>', '<mask>',
+    '1', '2',
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L',
+    'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V',
+    'W', 'X', 'Y', 'Z'
+];
+function vocabToken(idx) {
+    return PROGEN2_VOCAB[idx] !== undefined ? PROGEN2_VOCAB[idx] : `<id:${idx}>`;
+}
+
 // File upload state
 let uploadedFiles = {
     activationIndices: null,
-    seq: null,
+    fasta: null,
+    logits: null,
     topActivations: null,
-    virtualWeights: null  // Optional
+    virtualWeights: null
 };
+// Analysis type detected from the uploaded generation.fasta. Null until a fasta is dropped.
+let detectedAnalysisType = null;
+// Cached parse of the uploaded generation.fasta so btnLoad doesn't re-read the file.
+let parsedUploadFasta = null;
 
 // Upload screen elements
 const uploadScreen = document.getElementById('upload-screen');
@@ -31,13 +57,17 @@ const dropzone = document.getElementById('dropzone');
 const fileInput = document.getElementById('file-input');
 const btnLoad = document.getElementById('btn-load');
 const statusActivation = document.getElementById('status-activation');
-const statusSeq = document.getElementById('status-seq');
 const statusTop = document.getElementById('status-top');
 const statusVirtual = document.getElementById('status-virtual');
+const statusFasta = document.getElementById('status-fasta');
+const statusLogits = document.getElementById('status-logits');
+const detectedAnalysisEl = document.getElementById('detected-analysis');
+const detectedTypeEl = document.getElementById('detected-type');
 const appContainer = document.getElementById('app');
 
 // Example selector elements
 const modelDropdown = document.getElementById('model-dropdown');
+const analysisDropdown = document.getElementById('analysis-dropdown');
 const exampleDropdown = document.getElementById('example-dropdown');
 const btnLoadCustom = document.getElementById('btn-load-custom');
 let examplesData = [];  // Store loaded examples
@@ -55,24 +85,27 @@ async function loadExamplesCSV() {
             const line = lines[i].trim();
             if (!line) continue;
 
-            // Parse CSV line (handle quoted values)
-            const match = line.match(/(\d+),\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"/);
+            // Parse CSV line (handle quoted values). 5 columns: id, name, path, model, analysis
+            const match = line.match(/(\d+),\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)",\s*"([^"]+)"/);
             if (match) {
                 examples.push({
                     id: match[1],
                     name: match[2],
                     path: match[3],
-                    model: match[4]
+                    model: match[4],
+                    analysis: match[5]
                 });
             }
         }
 
-        // Fetch sequence for each example to build the dropdown label
+        // Fetch sequence for each example to build the dropdown label.
+        // generation.fasta is the unified sequence source for all analysis types.
         for (const example of examples) {
             try {
-                const seqResponse = await fetch(example.path + 'seq.txt');
-                const seqText = await seqResponse.text();
-                example.sequence = seqText.trim();
+                const fastaResp = await fetch(example.path + 'generation.fasta');
+                const fastaText = await fastaResp.text();
+                const fasta = parseGenerationFasta(fastaText);
+                example.sequence = fasta.fullSequence;
             } catch (err) {
                 example.sequence = '';
             }
@@ -80,9 +113,10 @@ async function loadExamplesCSV() {
 
         examplesData = examples;
         populateModelDropdown(examples);
+        populateAnalysisDropdown();
         populateExampleDropdown();
 
-        // Auto-load first example from selected model
+        // Auto-load first example for the current model+analysis
         const filtered = getFilteredExamples();
         if (filtered.length > 0) {
             exampleDropdown.value = filtered[0].path;
@@ -112,13 +146,39 @@ function populateModelDropdown(examples) {
     }
 }
 
-// Get examples filtered by selected model
-function getFilteredExamples() {
+// Populate analysis dropdown with unique analysis values for the current model
+function populateAnalysisDropdown() {
     const selectedModel = modelDropdown.value;
-    return examplesData.filter(e => e.model === selectedModel);
+    // ESM models are zero-shot only, so the analysis dropdown is single-option noise
+    analysisDropdown.style.display = selectedModel.includes('ESM') ? 'none' : '';
+    const analyses = [...new Set(examplesData
+        .filter(e => e.model === selectedModel)
+        .map(e => e.analysis))];
+    // Stable order: zero-shot first, then CLM, then GLM, then anything else
+    const order = { 'zero-shot': 0, 'CLM': 1, 'GLM': 2 };
+    analyses.sort((a, b) => (order[a] ?? 99) - (order[b] ?? 99) || a.localeCompare(b));
+    const prev = analysisDropdown.value;
+    analysisDropdown.innerHTML = '';
+    for (const a of analyses) {
+        const opt = document.createElement('option');
+        opt.value = a;
+        opt.textContent = a;
+        analysisDropdown.appendChild(opt);
+    }
+    if (analyses.includes(prev)) analysisDropdown.value = prev;
 }
 
-// Populate dropdown with examples filtered by current model
+// Get examples filtered by selected model and analysis
+function getFilteredExamples() {
+    const selectedModel = modelDropdown.value;
+    const selectedAnalysis = analysisDropdown.value;
+    return examplesData.filter(e =>
+        e.model === selectedModel &&
+        (!selectedAnalysis || e.analysis === selectedAnalysis)
+    );
+}
+
+// Populate dropdown with examples filtered by current model + analysis
 function populateExampleDropdown() {
     const filtered = getFilteredExamples();
     exampleDropdown.innerHTML = '<option value="">Select an example circuit...</option>';
@@ -156,6 +216,138 @@ async function loadVirtualWeights(path) {
     return fetch(path + 'virtual_weights.json').then(r => r.ok ? r.text() : null).catch(() => null);
 }
 
+// Parse generation.fasta. Format:
+//   >prompt
+//   <prompt body, may contain "<CLM>" or "<GLM>" placeholder>
+//   >generated_output
+//   <generated tokens, or a score for zero-shot>
+// Detection rule: <CLM> marker -> 'CLM'; <GLM> marker -> 'GLM'; neither -> 'zero-shot'.
+// For zero-shot the >output section is a score (not residues), so the sequence is the prompt only.
+function parseGenerationFasta(text) {
+    const lines = text.split(/\r?\n/);
+    let mode = null;
+    const promptLines = [];
+    const genLines = [];
+    for (const line of lines) {
+        if (line.startsWith('>prompt')) { mode = 'prompt'; continue; }
+        if (line.startsWith('>generated_output') || line.startsWith('>output')) { mode = 'gen'; continue; }
+        if (mode === 'prompt') promptLines.push(line);
+        else if (mode === 'gen') genLines.push(line);
+    }
+    const promptWithMarker = promptLines.join('').trim();
+    const rawGenerated = genLines.join('').trim();
+    const markerMatch = promptWithMarker.match(/<(CLM|GLM)>/);
+    if (!markerMatch) {
+        // Zero-shot: prompt is the full sequence; >output is a score, not residues.
+        return {
+            type: 'zero-shot',
+            promptWithMarker,
+            prompt: promptWithMarker,
+            generated: '',
+            clmStart: promptWithMarker.length,
+            fullSequence: promptWithMarker,
+            marker: null
+        };
+    }
+    const marker = markerMatch[0];
+    const type = markerMatch[1];  // 'CLM' or 'GLM'
+    const clmStart = markerMatch.index;
+    const prompt = promptWithMarker.slice(0, clmStart) + promptWithMarker.slice(clmStart + marker.length);
+    const fullSequence = prompt.slice(0, clmStart) + rawGenerated + prompt.slice(clmStart);
+    return { type, promptWithMarker, prompt, generated: rawGenerated, clmStart, fullSequence, marker };
+}
+
+// Parse a NumPy v1.0 .npy file containing a 2D float32 array (dtype='<f4', C-order).
+// Returns { shape: [rows, cols], data: Float32Array (length rows*cols) }.
+function parseNpyFloat32(arrayBuffer) {
+    const bytes = new Uint8Array(arrayBuffer);
+    // Magic
+    if (bytes[0] !== 0x93 || String.fromCharCode(bytes[1], bytes[2], bytes[3], bytes[4], bytes[5]) !== 'NUMPY') {
+        throw new Error('Not a .npy file (bad magic)');
+    }
+    const major = bytes[6];
+    let headerLen, headerStart;
+    if (major === 1) {
+        headerLen = bytes[8] | (bytes[9] << 8);
+        headerStart = 10;
+    } else if (major === 2 || major === 3) {
+        headerLen = bytes[8] | (bytes[9] << 8) | (bytes[10] << 16) | (bytes[11] << 24);
+        headerStart = 12;
+    } else {
+        throw new Error('Unsupported .npy major version: ' + major);
+    }
+    const headerText = new TextDecoder('utf-8').decode(bytes.subarray(headerStart, headerStart + headerLen));
+    const dataOffset = headerStart + headerLen;
+
+    const descrMatch = headerText.match(/'descr':\s*'([^']+)'/);
+    const fortranMatch = headerText.match(/'fortran_order':\s*(True|False)/);
+    const shapeMatch = headerText.match(/'shape':\s*\(([^)]*)\)/);
+    if (!descrMatch || !fortranMatch || !shapeMatch) {
+        throw new Error('Malformed .npy header: ' + headerText);
+    }
+    if (descrMatch[1] !== '<f4') {
+        throw new Error("Only dtype '<f4' (little-endian float32) is supported, got: " + descrMatch[1]);
+    }
+    if (fortranMatch[1] !== 'False') {
+        throw new Error('Fortran-order arrays not supported');
+    }
+    const shape = shapeMatch[1]
+        .split(',')
+        .map(s => s.trim())
+        .filter(s => s.length > 0)
+        .map(s => parseInt(s, 10));
+    if (shape.length !== 2) {
+        throw new Error('Expected 2D logits array, got shape: (' + shape.join(', ') + ')');
+    }
+    const total = shape[0] * shape[1];
+    // Float32Array constructor requires offset to be a multiple of 4. The .npy data
+    // section can land on an unaligned offset (header is padded to a multiple of 64
+    // for a total file alignment, but if hand-written this isn't guaranteed). Copy
+    // to a fresh buffer if misaligned.
+    let data;
+    if (dataOffset % 4 === 0) {
+        data = new Float32Array(arrayBuffer, dataOffset, total);
+    } else {
+        const copy = new ArrayBuffer(total * 4);
+        new Uint8Array(copy).set(bytes.subarray(dataOffset, dataOffset + total * 4));
+        data = new Float32Array(copy);
+    }
+    return { shape, data };
+}
+
+// Sort all entries of a numeric row descending; returns [{idx, value}, ...].
+function rankAllLogits(row) {
+    const ranked = new Array(row.length);
+    for (let i = 0; i < row.length; i++) {
+        ranked[i] = { idx: i, value: row[i] };
+    }
+    ranked.sort((a, b) => b.value - a.value);
+    return ranked;
+}
+
+// Top-k indices/values from a numeric row, descending by value.
+function computeTopK(row, k) {
+    const top = [];  // ascending by value, length <= k
+    for (let i = 0; i < row.length; i++) {
+        const v = row[i];
+        if (top.length < k) {
+            top.push({ idx: i, value: v });
+            // Insertion sort to keep ascending
+            let j = top.length - 1;
+            while (j > 0 && top[j - 1].value > top[j].value) {
+                const tmp = top[j - 1]; top[j - 1] = top[j]; top[j] = tmp; j--;
+            }
+        } else if (v > top[0].value) {
+            top[0] = { idx: i, value: v };
+            let j = 0;
+            while (j + 1 < top.length && top[j + 1].value < top[j].value) {
+                const tmp = top[j + 1]; top[j + 1] = top[j]; top[j] = tmp; j++;
+            }
+        }
+    }
+    return top.reverse();  // descending
+}
+
 // Load example data from path
 async function loadExampleData(path) {
     const loadingOverlay = document.getElementById('loading-overlay');
@@ -164,17 +356,48 @@ async function loadExampleData(path) {
         // Reset state
         resetAppState();
 
-        // Fetch all required files
-        const [activationsText, seqText, topActivationsText, virtualWeightsText, canvasStateText] = await Promise.all([
+        // Determine analysis type from the example record. GLM is treated the same as CLM downstream.
+        const example = examplesData.find(e => e.path === path);
+        analysisType = (example && (example.analysis === 'CLM' || example.analysis === 'GLM')) ? 'CLM' : 'zero-shot';
+
+        // generation.fasta is now the unified sequence source for all analysis types.
+        // logits.npy is only fetched for CLM/GLM.
+        let activationsText, fastaText, topActivationsText, virtualWeightsText, canvasStateText, logitsBuf;
+        const baseFetches = [
             fetch(path + 'activation_indices.json').then(r => r.text()),
-            fetch(path + 'seq.txt').then(r => r.text()),
+            fetch(path + 'generation.fasta').then(r => r.text()),
             fetch(path + 'top_activations.json').then(r => r.text()),
             loadVirtualWeights(path),
             fetch(path + 'canvas-state.json').then(r => r.ok ? r.text() : null).catch(() => null)
-        ]);
+        ];
+        if (analysisType === 'CLM') {
+            [activationsText, fastaText, topActivationsText, virtualWeightsText, canvasStateText, logitsBuf] = await Promise.all([
+                ...baseFetches,
+                fetch(path + 'logits.npy').then(r => r.arrayBuffer())
+            ]);
+        } else {
+            [activationsText, fastaText, topActivationsText, virtualWeightsText, canvasStateText] = await Promise.all(baseFetches);
+        }
 
         const activations = JSON.parse(activationsText);
-        sequence = seqText.trim();
+        const fasta = parseGenerationFasta(fastaText);
+        sequence = fasta.fullSequence;
+        clmStart = fasta.clmStart;
+        numGenerated = fasta.generated.length;
+        markerLabel = fasta.marker || '<CLM>';
+        if (analysisType === 'CLM') {
+            const npy = parseNpyFloat32(logitsBuf);
+            logitsData = npy.data;
+            logitsShape = npy.shape;
+            topLogitsByPos = new Map();
+            const rows = Math.min(npy.shape[0], numGenerated);
+            for (let i = 0; i < rows; i++) {
+                const fullRow = npy.data.subarray(i * npy.shape[1], (i + 1) * npy.shape[1]);
+                // Restrict to in-vocab indices (0..PROGEN2_VOCAB.length-1).
+                const vocabRow = fullRow.subarray(0, Math.min(fullRow.length, PROGEN2_VOCAB.length));
+                topLogitsByPos.set(clmStart + i, rankAllLogits(vocabRow));
+            }
+        }
         topActivationsData = JSON.parse(topActivationsText);
 
         // Parse virtual weights if present (may be pre-parsed array from chunked loading or text)
@@ -257,6 +480,16 @@ function resetAppState() {
     virtualWeightsVisible = false;
     virtualWeightsEdges = [];
     aggregatedVirtualWeights.clear();
+    analysisType = 'zero-shot';
+    logitsData = null;
+    logitsShape = null;
+    clmStart = 0;
+    numGenerated = 0;
+    topLogitsByPos = null;
+    markerLabel = '<CLM>';
+    detectedAnalysisType = null;
+    parsedUploadFasta = null;
+    if (detectedAnalysisEl) detectedAnalysisEl.classList.add('hidden');
 
     // Clear canvas
     const nodesContainer = document.getElementById('nodes-container');
@@ -264,11 +497,23 @@ function resetAppState() {
     if (nodesContainer) nodesContainer.innerHTML = '';
     if (edgesSvg) edgesSvg.innerHTML = '';
 
-    // Reset virtual weights button state
+    // Clear any virtual-weight edges still drawn over the grid from a prior example
+    const gridEdgesSvg = document.getElementById('grid-edges-svg');
+    if (gridEdgesSvg) gridEdgesSvg.innerHTML = '';
+
+    // Reset virtual weights button state (class, label, and disabled)
     const btnVirtualWeights = document.getElementById('btn-virtual-weights');
     if (btnVirtualWeights) {
         btnVirtualWeights.classList.remove('active');
+        btnVirtualWeights.innerHTML = '<span class="btn-icon">👁</span> Show virtual weights';
+        btnVirtualWeights.disabled = true;
     }
+    // Reset threshold to default; loadExampleData recomputes it for examples that have weights
+    virtualWeightsThreshold = 10;
+    const edgeSlider = document.getElementById('edge-threshold-slider');
+    const edgeInput = document.getElementById('edge-threshold-input');
+    if (edgeSlider) edgeSlider.value = virtualWeightsThreshold;
+    if (edgeInput) edgeInput.value = virtualWeightsThreshold;
 
     // // Hide edge filter control
     // const edgeFilterControl = document.getElementById('edge-filter-control');
@@ -279,6 +524,17 @@ function resetAppState() {
 
 // Handle model dropdown change
 modelDropdown.addEventListener('change', async () => {
+    populateAnalysisDropdown();
+    populateExampleDropdown();
+    const filtered = getFilteredExamples();
+    if (filtered.length > 0) {
+        exampleDropdown.value = filtered[0].path;
+        await loadExampleData(filtered[0].path);
+    }
+});
+
+// Handle analysis dropdown change
+analysisDropdown.addEventListener('change', async () => {
     populateExampleDropdown();
     const filtered = getFilteredExamples();
     if (filtered.length > 0) {
@@ -296,24 +552,44 @@ exampleDropdown.addEventListener('change', async (e) => {
 });
 
 // Handle "Load Custom Circuit" button
+function resetDropzoneStatuses() {
+    for (const el of [statusActivation, statusTop, statusVirtual, statusFasta, statusLogits]) {
+        if (!el) continue;
+        el.classList.remove('loaded');
+        const icon = el.querySelector('.status-icon');
+        if (icon) icon.textContent = '○';
+    }
+}
+
+// Show/hide the "Detected:" indicator based on the analysis type detected from
+// the uploaded generation.fasta. The logits.npy row stays permanently visible
+// (styled .optional) — it's only required by the Load button for CLM/GLM.
+function applyDetectedAnalysis() {
+    if (detectedAnalysisEl && detectedTypeEl) {
+        if (detectedAnalysisType) {
+            detectedTypeEl.textContent = detectedAnalysisType;
+            detectedAnalysisEl.classList.remove('hidden');
+        } else {
+            detectedAnalysisEl.classList.add('hidden');
+        }
+    }
+    updateLoadButton();
+}
+
 btnLoadCustom.addEventListener('click', () => {
     // Reset file upload state
     uploadedFiles = {
         activationIndices: null,
-        seq: null,
+        fasta: null,
+        logits: null,
         topActivations: null,
         virtualWeights: null
     };
+    detectedAnalysisType = null;
+    parsedUploadFasta = null;
 
-    // Reset status indicators
-    statusActivation.classList.remove('loaded');
-    statusActivation.querySelector('.status-icon').textContent = '○';
-    statusSeq.classList.remove('loaded');
-    statusSeq.querySelector('.status-icon').textContent = '○';
-    statusTop.classList.remove('loaded');
-    statusTop.querySelector('.status-icon').textContent = '○';
-    statusVirtual.classList.remove('loaded');
-    statusVirtual.querySelector('.status-icon').textContent = '○';
+    resetDropzoneStatuses();
+    applyDetectedAnalysis();
 
     // Reset button
     btnLoad.textContent = 'Load Data';
@@ -348,7 +624,8 @@ fileInput.addEventListener('change', (e) => {
     handleFiles(e.target.files);
 });
 
-function handleFiles(files) {
+async function handleFiles(files) {
+    let fastaFile = null;
     for (const file of files) {
         const name = file.name.toLowerCase();
 
@@ -356,11 +633,20 @@ function handleFiles(files) {
             uploadedFiles.activationIndices = file;
             statusActivation.classList.add('loaded');
             statusActivation.querySelector('.status-icon').textContent = '●';
-        } else if (name === 'seq.txt' || name.includes('seq')) {
-            uploadedFiles.seq = file;
-            statusSeq.classList.add('loaded');
-            statusSeq.querySelector('.status-icon').textContent = '●';
-        } else if (name === 'top_activations.json' || name.includes('top_activations')) {
+        } else if (name === 'generation.fasta' || name.endsWith('.fasta') || name.includes('generation')) {
+            uploadedFiles.fasta = file;
+            fastaFile = file;
+            if (statusFasta) {
+                statusFasta.classList.add('loaded');
+                statusFasta.querySelector('.status-icon').textContent = '●';
+            }
+        } else if (name === 'logits.npy' || name.endsWith('.npy') || name.includes('logits')) {
+            uploadedFiles.logits = file;
+            if (statusLogits) {
+                statusLogits.classList.add('loaded');
+                statusLogits.querySelector('.status-icon').textContent = '●';
+            }
+        } else if (name === 'top_activations.json' || name.includes('top_activations') || name.includes('top_activation')) {
             uploadedFiles.topActivations = file;
             statusTop.classList.add('loaded');
             statusTop.querySelector('.status-icon').textContent = '●';
@@ -371,15 +657,29 @@ function handleFiles(files) {
         }
     }
 
-    updateLoadButton();
+    if (fastaFile) {
+        try {
+            const text = await fastaFile.text();
+            parsedUploadFasta = parseGenerationFasta(text);
+            detectedAnalysisType = parsedUploadFasta.type;
+        } catch (err) {
+            console.error('Error reading generation.fasta:', err);
+            parsedUploadFasta = null;
+            detectedAnalysisType = null;
+        }
+    }
+
+    applyDetectedAnalysis();
 }
 
 function updateLoadButton() {
-    const allLoaded = uploadedFiles.activationIndices &&
-                      uploadedFiles.seq &&
-                      uploadedFiles.topActivations &&
-                      uploadedFiles.virtualWeights;
-    btnLoad.disabled = !allLoaded;
+    const baseLoaded = uploadedFiles.activationIndices
+        && uploadedFiles.fasta
+        && uploadedFiles.topActivations
+        && uploadedFiles.virtualWeights;
+    const causalReady = detectedAnalysisType === 'zero-shot'
+        || ((detectedAnalysisType === 'CLM' || detectedAnalysisType === 'GLM') && uploadedFiles.logits);
+    btnLoad.disabled = !(baseLoaded && detectedAnalysisType && causalReady);
 }
 
 btnLoad.addEventListener('click', async (e) => {
@@ -392,30 +692,51 @@ btnLoad.addEventListener('click', async (e) => {
         btnLoad.disabled = true;
         loadingOverlay.classList.remove('hidden');
 
+        // Snapshot state needed to restore after resetAppState() wipes module globals.
+        const detected = detectedAnalysisType;
+        const fasta = parsedUploadFasta;
+
         // Reset app state for fresh load
         resetAppState();
+        // GLM is treated identically to CLM downstream; the marker label distinguishes them visually.
+        analysisType = (detected === 'GLM' || detected === 'CLM') ? 'CLM' : 'zero-shot';
 
         // Clear dropdown selection (custom circuit)
         exampleDropdown.value = '';
 
         // Read all required files
-        const filePromises = [
+        const [activationsText, topActivationsText, virtualWeightsText, logitsBuf] = await Promise.all([
             uploadedFiles.activationIndices.text(),
-            uploadedFiles.seq.text(),
             uploadedFiles.topActivations.text(),
-            uploadedFiles.virtualWeights.text()
-        ];
-
-        const results = await Promise.all(filePromises);
-        const [activationsText, seqText, topActivationsText] = results;
+            uploadedFiles.virtualWeights.text(),
+            (analysisType === 'CLM' && uploadedFiles.logits)
+                ? uploadedFiles.logits.arrayBuffer()
+                : Promise.resolve(null)
+        ]);
 
         const activations = JSON.parse(activationsText);
-        sequence = seqText.trim();
+        sequence = fasta.fullSequence;
+        clmStart = fasta.clmStart;
+        numGenerated = fasta.generated.length;
+        markerLabel = fasta.marker || '<CLM>';
+        if (analysisType === 'CLM') {
+            const npy = parseNpyFloat32(logitsBuf);
+            logitsData = npy.data;
+            logitsShape = npy.shape;
+            topLogitsByPos = new Map();
+            const rows = Math.min(npy.shape[0], numGenerated);
+            for (let i = 0; i < rows; i++) {
+                const fullRow = npy.data.subarray(i * npy.shape[1], (i + 1) * npy.shape[1]);
+                // Restrict to in-vocab indices (0..PROGEN2_VOCAB.length-1).
+                const vocabRow = fullRow.subarray(0, Math.min(fullRow.length, PROGEN2_VOCAB.length));
+                topLogitsByPos.set(clmStart + i, rankAllLogits(vocabRow));
+            }
+        }
         topActivationsData = JSON.parse(topActivationsText);
 
         // Parse virtual weights if present
-        if (results[3]) {
-            virtualWeightsData = JSON.parse(results[3]);
+        if (virtualWeightsText) {
+            virtualWeightsData = JSON.parse(virtualWeightsText);
             // Precompute averaged weights by (layer, latent) pairs
             preprocessVirtualWeights();
             // Enable the virtual weights toggle button
@@ -508,6 +829,22 @@ sequenceBar.addEventListener('scroll', () => {
     isSyncing = false;
 });
 
+// Number of model layers. Authoritative: `num_layers` in top_activations.json.
+// Falls back to max(activationData layer index)+1 for files that pre-date the
+// field — without that fallback, sparse activation data silently under-renders
+// (e.g. kinase_zeroshot has activations only for layers [0,7,8,9] but the
+// model has 10 layers, so layers 7–9 must still render).
+function getNumLayers() {
+    if (topActivationsData && Number.isInteger(topActivationsData.num_layers)) {
+        return topActivationsData.num_layers;
+    }
+    const keys = Object.keys(activationData);
+    if (keys.length === 0) return 0;
+    let max = -1;
+    for (const k of keys) { const n = +k; if (n > max) max = n; }
+    return max + 1;
+}
+
 // Color scale for activation values (light green #b8e994 to teal #079992)
 function getActivationColor(value, minVal, maxVal) {
     const t = Math.max(0, Math.min(1, (value - minVal) / (maxVal - minVal)));
@@ -536,16 +873,20 @@ function getValueRange() {
 
 // Render layer labels dynamically based on loaded data
 function renderLayerLabels() {
-    const numLayers = Object.keys(activationData).length;
+    const numLayers = getNumLayers();
     const layerLabelsContainer = document.getElementById('layer-labels');
     let html = '';
+    if (analysisType === 'CLM' && topLogitsByPos) {
+        html += `<div class="layer-label layer-label-lgt" data-layer="lgt">lgt</div>`;
+    }
     for (let layer = numLayers - 1; layer >= 0; layer--) {
         html += `<div class="layer-label" data-layer="${layer}">Layer ${layer + 1}</div>`;
     }
     layerLabelsContainer.innerHTML = html;
 
-    // Attach click handlers
+    // Attach click handlers (skip lgt — no per-layer panel for it)
     layerLabelsContainer.querySelectorAll('.layer-label').forEach(label => {
+        if (label.dataset.layer === 'lgt') return;
         label.addEventListener('click', () => {
             const layer = parseInt(label.dataset.layer);
             showLayerPanel(layer);
@@ -567,11 +908,22 @@ function computeColumnWidths() {
     const numPositions = sequence.length;
     const maxLatentsPerPos = new Array(numPositions).fill(0);
 
-    const numLayers = Object.keys(activationData).length;
+    const numLayers = getNumLayers();
     for (let layer = 0; layer < numLayers; layer++) {
         for (let pos = 0; pos < numPositions; pos++) {
-            const items = activationData[layer]?.[pos] || [];
+            // activationData is indexed by logical position; collapse generated columns
+            // onto the marker and shift post-marker columns back so each fullSequence
+            // column reads its corresponding logical entry.
+            const items = activationData[layer]?.[logicalPos(pos)] || [];
             maxLatentsPerPos[pos] = Math.max(maxLatentsPerPos[pos], items.length);
+        }
+    }
+    // Account for top-5 logit boxes in the lgt row at generated positions.
+    if (analysisType === 'CLM' && topLogitsByPos) {
+        for (const pos of topLogitsByPos.keys()) {
+            if (pos >= 0 && pos < numPositions) {
+                maxLatentsPerPos[pos] = Math.max(maxLatentsPerPos[pos], 2);
+            }
         }
     }
     return maxLatentsPerPos;
@@ -589,7 +941,44 @@ function renderGrid() {
     const cellPaddingAndBorder = 21; // 20px padding (10px each side) + 1px border
 
     let html = '';
-    const numLayers = Object.keys(activationData).length;
+    const numLayers = getNumLayers();
+
+    // CLM: lgt row at the top, only populated at generated positions.
+    if (analysisType === 'CLM' && topLogitsByPos) {
+        html += `<div class="grid-row grid-row-lgt" data-layer="lgt">`;
+        for (let pos = 0; pos < numPositions; pos++) {
+            const cellWidth = Math.max(minCellWidth, maxLatentsPerPos[pos] * boxWidth + cellPaddingAndBorder);
+            html += `<div class="grid-cell" data-layer="lgt" data-pos="${pos}" style="width: ${cellWidth}px; min-width: ${cellWidth}px;">`;
+            const ranked = topLogitsByPos.get(pos);
+            if (ranked && ranked.length > 0) {
+                const top2 = ranked.slice(0, 2);
+                // Color scale spans the top-2 themselves so rank 1 always reads "hot"
+                const maxV = top2[0].value;
+                const minV = top2[top2.length - 1].value;
+                const span = Math.max(1e-9, maxV - minV);
+                for (let r = 0; r < top2.length; r++) {
+                    const { idx, value } = top2[r];
+                    const tok = vocabToken(idx);
+                    const tokSafe = escapeHtml(tok);
+                    const color = getActivationColor(value, minV, maxV);
+                    const t = (value - minV) / span;
+                    const textColor = (t > 0.15 && t < 0.85) ? '#000' : '#fff';
+                    html += `<div class="latent-box logit-box"
+                        data-layer="lgt"
+                        data-pos="${pos}"
+                        data-rank="${r}"
+                        data-token-idx="${idx}"
+                        data-value="${value.toFixed(3)}"
+                        style="background: ${color}; color: ${textColor}"
+                        title="rank ${r + 1}: ${tokSafe} (${value.toFixed(3)})"
+                    >${tokSafe}</div>`;
+                }
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+
     // Each row is a layer (reversed: top to 0)
     for (let layer = numLayers - 1; layer >= 0; layer--) {
         html += `<div class="grid-row" data-layer="${layer}">`;
@@ -597,7 +986,7 @@ function renderGrid() {
         for (let pos = 0; pos < numPositions; pos++) {
             const cellWidth = Math.max(minCellWidth, maxLatentsPerPos[pos] * boxWidth + cellPaddingAndBorder);
             html += `<div class="grid-cell" data-layer="${layer}" data-pos="${pos}" style="width: ${cellWidth}px; min-width: ${cellWidth}px;">`;
-            const items = activationData[layer]?.[pos] || [];
+            const items = activationData[layer]?.[logicalPos(pos)] || [];
             for (const item of items) {
                 const color = getActivationColor(item.value, min, max);
                 const t = (item.value - min) / (max - min);
@@ -621,9 +1010,13 @@ function renderGrid() {
     // Store column widths for sequence bar
     window.columnWidths = maxLatentsPerPos.map(count => Math.max(minCellWidth, count * boxWidth + cellPaddingAndBorder));
 
-    // Add click handlers
+    // Add click handlers — distinguish latent vs logit boxes
     gridBody.querySelectorAll('.latent-box').forEach(box => {
-        box.addEventListener('click', handleLatentClick);
+        if (box.classList.contains('logit-box')) {
+            box.addEventListener('click', handleLogitClick);
+        } else {
+            box.addEventListener('click', handleLatentClick);
+        }
     });
 }
 
@@ -633,8 +1026,12 @@ function renderSequence() {
     const widths = window.columnWidths || [];
     for (let i = 0; i < sequence.length; i++) {
         const width = widths[i] || 36;
-        html += `<div class="seq-item" data-pos="${i}" style="width: ${width}px; min-width: ${width}px;">
-            <span class="seq-aa">${sequence[i]}</span>
+        const isGenerated = analysisType === 'CLM' &&
+            i >= clmStart && i < clmStart + numGenerated;
+        const cls = 'seq-item' + (isGenerated ? ' seq-item-generated' : '');
+        const label = isGenerated ? escapeHtml(markerLabel) : sequence[i];
+        html += `<div class="${cls}" data-pos="${i}" style="width: ${width}px; min-width: ${width}px;">
+            <span class="seq-aa">${label}</span>
             <span class="seq-pos">${displayPos(i)}</span>
         </div>`;
     }
@@ -693,7 +1090,8 @@ function renderWildTypeCard(layer, latentIdx, clickedPos, clickedValue) {
     let aaHtml = '';
     for (let i = 0; i < sequence.length; i++) {
         const aa = sequence[i];
-        const activation = activations[i] || 0;
+        // activations is keyed by logical pos (matches activationData / activation_indices.json).
+        const activation = activations[logicalPos(i)] || 0;
         const isClicked = i === clickedPos;
 
         if (activation === 0) {
@@ -731,6 +1129,179 @@ function renderWildTypeCard(layer, latentIdx, clickedPos, clickedValue) {
 let currentPanelState = null;
 let currentInfluenceSubtab = 'incoming'; // 'incoming' or 'outgoing'
 
+// Handle a click on a logit box in the lgt row
+function handleLogitClick(e) {
+    const target = e.currentTarget;
+    const pos = parseInt(target.dataset.pos);
+    showLogitsPanel(pos);
+}
+
+// State for the logits panel (tabs + token drill-down)
+let currentLogitsPos = null;
+let currentLogitsTab = 'ranked';      // 'ranked' | 'incoming'
+let selectedLogitTokenIdx = null;     // set when user clicks a row in the ranked table
+
+// Show the logits panel for a generated position. Defaults to the "All ranked" tab.
+function showLogitsPanel(pos) {
+    const ranked = topLogitsByPos && topLogitsByPos.get(pos);
+    if (!ranked || ranked.length === 0) return;
+
+    currentPanelState = null;  // logits panel has no latent context
+    currentLogitsPos = pos;
+    currentLogitsTab = 'ranked';
+    selectedLogitTokenIdx = null;
+
+    panelTitle.textContent = `Logits @ position ${displayPos(pos)}`;
+
+    // Hide the "Add to Canvas" button if it exists — not meaningful for logits
+    const addBtn = document.getElementById('panel-add-to-canvas');
+    if (addBtn) addBtn.style.display = 'none';
+
+    renderLogitsPanel();
+    activationPanel.classList.remove('hidden');
+}
+
+// Re-renders #activation-panel-content for the current logits-panel state.
+function renderLogitsPanel() {
+    const pos = currentLogitsPos;
+    const ranked = topLogitsByPos.get(pos);
+
+    let html = '<div class="logit-panel">';
+
+    // Tab bar
+    html += '<div class="logit-tabs">';
+    html += `<button class="logit-tab ${currentLogitsTab === 'ranked' ? 'active' : ''}" data-tab="ranked">All ranked</button>`;
+    if (selectedLogitTokenIdx !== null) {
+        const tok = vocabToken(selectedLogitTokenIdx);
+        html += `<button class="logit-tab ${currentLogitsTab === 'incoming' ? 'active' : ''}" data-tab="incoming">Incoming → ${escapeHtml(tok)}</button>`;
+    }
+    html += '</div>';
+
+    if (currentLogitsTab === 'incoming' && selectedLogitTokenIdx !== null) {
+        html += renderLogitsIncomingTab(pos, selectedLogitTokenIdx);
+    } else {
+        html += renderLogitsRankedTab(ranked, pos);
+    }
+
+    html += '</div>';
+    panelContent.innerHTML = html;
+
+    // Wire tab clicks
+    panelContent.querySelectorAll('.logit-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentLogitsTab = btn.dataset.tab;
+            renderLogitsPanel();
+        });
+    });
+
+    // Wire row clicks in the ranked table — drill into the incoming-edges tab
+    panelContent.querySelectorAll('tr.logit-row[data-token-idx]').forEach(row => {
+        row.addEventListener('click', () => {
+            selectedLogitTokenIdx = parseInt(row.dataset.tokenIdx);
+            currentLogitsTab = 'incoming';
+            renderLogitsPanel();
+        });
+    });
+
+    // Wire per-row "Add to canvas" buttons — must not bubble into row click
+    panelContent.querySelectorAll('.btn-add-logit-to-canvas').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const tokenIdx = parseInt(btn.dataset.tokenIdx);
+            const value = parseFloat(btn.dataset.value);
+            addLogitNodeToCanvas(currentLogitsPos, tokenIdx, value);
+        });
+    });
+}
+
+function renderLogitsRankedTab(ranked, pos) {
+    const maxV = ranked[0].value;
+    const minV = ranked[ranked.length - 1].value;
+    const span = Math.max(1e-9, maxV - minV);
+
+    let html = `<div class="logit-panel-context">
+        Position <strong>${displayPos(pos)}</strong>
+        &middot; generated token: <strong>${escapeHtml(sequence[pos] ?? '?')}</strong>
+        &middot; <span class="logit-count">${ranked.length} ranked</span>
+        &middot; <em>click a row to see incoming edges</em>
+    </div>`;
+    html += '<table class="logit-table"><thead><tr>' +
+            '<th>Rank</th><th>Token</th><th>Idx</th><th>Logit</th><th></th><th></th>' +
+            '</tr></thead><tbody>';
+    for (let r = 0; r < ranked.length; r++) {
+        const { idx, value } = ranked[r];
+        const tok = vocabToken(idx);
+        const barPct = ((value - minV) / span) * 100;
+        const color = getActivationColor(value, minV, maxV);
+        html += `<tr class="logit-row" data-token-idx="${idx}">
+            <td class="logit-rank">${r + 1}</td>
+            <td class="logit-token">${escapeHtml(tok)}</td>
+            <td class="logit-idx">${idx}</td>
+            <td class="logit-value">${value.toFixed(3)}</td>
+            <td class="logit-bar-cell">
+                <div class="logit-bar-track">
+                    <div class="logit-bar-fill" style="width: ${barPct.toFixed(1)}%; background: ${color};"></div>
+                </div>
+            </td>
+            <td class="logit-add-cell">
+                <button class="btn-add-logit-to-canvas" data-token-idx="${idx}" data-value="${value}">Add to canvas</button>
+            </td>
+        </tr>`;
+    }
+    html += '</tbody></table>';
+    return html;
+}
+
+function renderLogitsIncomingTab(pos, tokenIdx) {
+    const tok = vocabToken(tokenIdx);
+    const edges = getIncomingLogitEdges(pos, tokenIdx);
+
+    let html = `<div class="logit-panel-context">
+        Incoming virtual-weight edges to <strong>${escapeHtml(tok)}</strong>
+        @ position <strong>${displayPos(pos)}</strong>
+        &middot; <span class="logit-count">${edges.length} edge${edges.length === 1 ? '' : 's'}</span>
+    </div>`;
+
+    if (edges.length === 0) {
+        html += `<div class="no-data-message">No virtual-weight edges target this token.</div>`;
+        return html;
+    }
+
+    const maxAbs = Math.max(...edges.map(e => Math.abs(e.weight)));
+    const span = Math.max(1e-9, maxAbs);
+
+    html += '<table class="logit-table incoming-edges"><thead><tr>' +
+            '<th>Rank</th><th>Src Pos</th><th>Src Layer</th><th>Src Latent</th><th>Weight</th><th></th>' +
+            '</tr></thead><tbody>';
+    for (let r = 0; r < edges.length; r++) {
+        const e = edges[r];
+        const barPct = (Math.abs(e.weight) / span) * 100;
+        const color = e.weight >= 0 ? '#dc2626' : '#2563eb';  // red positive, blue negative (matches grid edges)
+        html += `<tr>
+            <td class="logit-rank">${r + 1}</td>
+            <td>${displayPos(e.srcPos)}</td>
+            <td>L${e.srcLayer + 1}</td>
+            <td>${e.srcFeature + 1}</td>
+            <td class="logit-value">${e.weight.toFixed(3)}</td>
+            <td class="logit-bar-cell">
+                <div class="logit-bar-track">
+                    <div class="logit-bar-fill" style="width: ${barPct.toFixed(1)}%; background: ${color};"></div>
+                </div>
+            </td>
+        </tr>`;
+    }
+    html += '</tbody></table>';
+    return html;
+}
+
+// Minimal HTML-escape for vocab tokens like "<pad>", "<bos>" that include angle brackets.
+function escapeHtml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 // Show the activation panel with wild type and top sequences for a latent
 function showActivationPanel(layer, latentIdx, clickedPos, clickedValue) {
     // Store state for tab switching (include aa for add to canvas)
@@ -756,6 +1327,7 @@ function showActivationPanel(layer, latentIdx, clickedPos, clickedValue) {
         });
         panelHeader.insertBefore(addBtn, panelClose);
     }
+    addBtn.style.display = '';  // restore in case it was hidden by the lgt panel
 
     // Render tabs and sequences view by default
     renderSequencesTab();
@@ -868,6 +1440,49 @@ function getIncomingEdges(tgtLayer, tgtLatent) {
     incoming.sort((a, b) => Math.abs(b.avgWeight) - Math.abs(a.avgWeight));
 
     return incoming;
+}
+
+// Get virtual-weight edges incoming to a specific (clmPos, lgt-layer, tokenIdx) target.
+// Returns array of { srcPos, srcLayer, srcFeature, weight } sorted by |weight| desc.
+// Operates on the raw virtualWeightsData (positional), not the aggregated map.
+function getIncomingLogitEdges(clmPos, tokenIdx) {
+    if (!virtualWeightsData) return [];
+    const numLayers = getNumLayers();
+    const out = [];
+    for (const [srcPos, srcLayer, srcFeature, tgtPos, tgtLayer, tgtFeature, weight] of virtualWeightsData) {
+        if (tgtPos === clmPos && tgtLayer === numLayers && tgtFeature === tokenIdx) {
+            out.push({ srcPos, srcLayer, srcFeature, weight });
+        }
+    }
+    out.sort((a, b) => Math.abs(b.weight) - Math.abs(a.weight));
+    return out;
+}
+
+// Get virtual-weight edges outgoing from a specific (srcLayer, srcFeature) latent to the
+// logits layer, aggregated per (tgtPos, tgtFeature) across all source positions.
+// Returns array of { tgtPos, tgtFeature, avgWeight, count } sorted by |avgWeight| desc.
+function getOutgoingLogitEdges(srcLayer, srcFeature) {
+    if (!virtualWeightsData) return [];
+    const numLayers = getNumLayers();
+    const map = new Map();
+    for (const [srcPos, sLayer, sFeature, tgtPos, tgtLayer, tgtFeature, weight] of virtualWeightsData) {
+        if (sLayer === srcLayer && sFeature === srcFeature && tgtLayer === numLayers) {
+            const key = `${tgtPos}-${tgtFeature}`;
+            let entry = map.get(key);
+            if (!entry) {
+                entry = { tgtPos, tgtFeature, totalWeight: 0, count: 0 };
+                map.set(key, entry);
+            }
+            entry.totalWeight += weight;
+            entry.count += 1;
+        }
+    }
+    const out = [];
+    for (const e of map.values()) {
+        out.push({ tgtPos: e.tgtPos, tgtFeature: e.tgtFeature, avgWeight: e.totalWeight / e.count, count: e.count });
+    }
+    out.sort((a, b) => Math.abs(b.avgWeight) - Math.abs(a.avgWeight));
+    return out;
 }
 
 // Get outgoing edges (influences) from a specific latent to higher layers
@@ -1101,24 +1716,45 @@ function renderIncomingInfluences(layer, latentIdx) {
 // Render outgoing influences content
 function renderOutgoingInfluences(layer, latentIdx) {
     let html = '';
-    const outgoingEdges = getOutgoingEdges(layer, latentIdx);
-
-    // Determine if this is the last layer
-    const numLayers = Object.keys(activationData).length;
+    const numLayers = getNumLayers();
     const isLastLayer = layer === numLayers - 1;
+    const isCLM = analysisType === 'CLM';
+
+    // For CLM/GLM, edges to the logits "layer" (tgtLayer === numLayers) need positional info
+    // (one row per (tgtPos, tgtFeature)), so drop the position-collapsed entries that
+    // getOutgoingEdges returns for them and replace with positional rows.
+    let regularEdges = getOutgoingEdges(layer, latentIdx);
+    let logitRows = [];
+    if (isCLM) {
+        regularEdges = regularEdges.filter(e => e.tgtLayer < numLayers);
+        logitRows = getOutgoingLogitEdges(layer, latentIdx);
+    }
+
+    const allRows = [
+        ...regularEdges.map(e => ({ ...e, isLogit: false })),
+        ...logitRows.map(e => ({
+            tgtLayer: numLayers,
+            tgtPos: e.tgtPos,
+            tgtFeature: e.tgtFeature,
+            avgWeight: e.avgWeight,
+            count: e.count,
+            isLogit: true,
+        })),
+    ];
+    allRows.sort((a, b) => Math.abs(b.avgWeight) - Math.abs(a.avgWeight));
 
     // Header info
     html += `
         <div class="influences-header">
             <div class="influences-summary">
-                <span class="influences-count">${outgoingEdges.length} outgoing connection${outgoingEdges.length !== 1 ? 's' : ''}</span>
+                <span class="influences-count">${allRows.length} outgoing connection${allRows.length !== 1 ? 's' : ''}</span>
                 <span class="influences-target">from Layer ${layer + 1}, Latent ${latentIdx + 1}</span>
             </div>
         </div>
     `;
 
-    if (outgoingEdges.length === 0) {
-        if (isLastLayer) {
+    if (allRows.length === 0) {
+        if (isLastLayer && !isCLM) {
             html += '<div class="no-data-message">This is the final layer - no outgoing influences.</div>';
         } else if (!virtualWeightsData) {
             html += '<div class="no-data-message">Virtual weights data not loaded. Upload virtual_weights.json to see influences.</div>';
@@ -1126,36 +1762,59 @@ function renderOutgoingInfluences(layer, latentIdx) {
             html += '<div class="no-data-message">No outgoing influences found for this latent.</div>';
         }
     } else {
-        // Calculate min/max for color scaling
-        const weights = outgoingEdges.map(e => e.avgWeight);
+        // Calculate min/max for color scaling (across both regular and logit rows)
+        const weights = allRows.map(e => e.avgWeight);
         const minWeight = Math.min(...weights);
         const maxWeight = Math.max(...weights);
 
         html += '<div class="influences-list">';
 
-        outgoingEdges.forEach((edge, index) => {
+        allRows.forEach((edge, index) => {
             const weightSign = edge.avgWeight >= 0 ? 'positive' : 'negative';
             const weightColor = getEdgeColor(edge.avgWeight, minWeight, maxWeight);
 
-            html += `
-                <div class="influence-card"
-                     data-tgt-layer="${edge.tgtLayer}"
-                     data-tgt-latent="${edge.tgtLatent}"
-                     data-direction="outgoing">
-                    <div class="influence-rank">#${index + 1}</div>
-                    <div class="influence-source">
-                        <span class="influence-layer">Layer ${edge.tgtLayer + 1}</span>
-                        <span class="influence-latent">Latent ${edge.tgtLatent + 1}</span>
+            if (edge.isLogit) {
+                const label = `lgt/${escapeHtml(vocabToken(edge.tgtFeature))}${displayPos(edge.tgtPos)}`;
+                html += `
+                    <div class="influence-card"
+                         data-is-logit="1"
+                         data-tgt-pos="${edge.tgtPos}"
+                         data-tgt-token-idx="${edge.tgtFeature}"
+                         data-direction="outgoing">
+                        <div class="influence-rank">#${index + 1}</div>
+                        <div class="influence-source">
+                            <span class="influence-layer">${label}</span>
+                        </div>
+                        <div class="influence-weight ${weightSign}" style="background: ${weightColor}">
+                            ${edge.avgWeight >= 0 ? '+' : ''}${edge.avgWeight.toFixed(4)}
+                        </div>
+                        <div class="influence-meta">
+                            <span class="influence-edge-count">${edge.count} edge${edge.count !== 1 ? 's' : ''}</span>
+                        </div>
+                        <button class="btn-view-source" title="View logits panel">View</button>
                     </div>
-                    <div class="influence-weight ${weightSign}" style="background: ${weightColor}">
-                        ${edge.avgWeight >= 0 ? '+' : ''}${edge.avgWeight.toFixed(4)}
+                `;
+            } else {
+                html += `
+                    <div class="influence-card"
+                         data-tgt-layer="${edge.tgtLayer}"
+                         data-tgt-latent="${edge.tgtLatent}"
+                         data-direction="outgoing">
+                        <div class="influence-rank">#${index + 1}</div>
+                        <div class="influence-source">
+                            <span class="influence-layer">Layer ${edge.tgtLayer + 1}</span>
+                            <span class="influence-latent">Latent ${edge.tgtLatent + 1}</span>
+                        </div>
+                        <div class="influence-weight ${weightSign}" style="background: ${weightColor}">
+                            ${edge.avgWeight >= 0 ? '+' : ''}${edge.avgWeight.toFixed(4)}
+                        </div>
+                        <div class="influence-meta">
+                            <span class="influence-edge-count">${edge.count} edge${edge.count !== 1 ? 's' : ''}</span>
+                        </div>
+                        <button class="btn-view-source" title="View target latent">View</button>
                     </div>
-                    <div class="influence-meta">
-                        <span class="influence-edge-count">${edge.count} edge${edge.count !== 1 ? 's' : ''}</span>
-                    </div>
-                    <button class="btn-view-source" title="View target latent">View</button>
-                </div>
-            `;
+                `;
+            }
         });
 
         html += '</div>';
@@ -1182,6 +1841,11 @@ function attachInfluenceListeners() {
             viewBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 const direction = card.dataset.direction;
+
+                if (direction === 'outgoing' && card.dataset.isLogit === '1') {
+                    showLogitsPanel(parseInt(card.dataset.tgtPos));
+                    return;
+                }
 
                 let targetLayer, targetLatent;
                 if (direction === 'outgoing') {
@@ -1684,6 +2348,14 @@ function addNodeToCanvas(latentIdx, layer, pos, aa, value, isSuper = false, chil
     return node;
 }
 
+// Add a logit (output-vocab) node to the canvas. The "logit layer" index matches
+// the convention used by virtual_weights.json (numLayers, e.g. 10), so the
+// existing checkAndCreateVirtualEdges lookup picks up latent→logit edges.
+function addLogitNodeToCanvas(pos, tokenIdx, value) {
+    const logitLayer = getNumLayers();
+    return addNodeToCanvas(tokenIdx, logitLayer, pos, vocabToken(tokenIdx), value);
+}
+
 // Find a canvas node by layer and latentIdx (feature)
 function findCanvasNode(layer, latentIdx) {
     return canvasNodes.find(n =>
@@ -1772,8 +2444,12 @@ function renderNode(node) {
             <div class="node-info">Super Node (${node.children.length} items)</div>
         `;
     } else {
+        const isLogit = analysisType === 'CLM' && node.layer === getNumLayers();
+        const label = isLogit
+            ? `lgt/${escapeHtml(vocabToken(node.latentIdx))}${displayPos(node.pos)}`
+            : `L${node.layer + 1}/${node.latentIdx + 1}`;
         div.innerHTML = `
-            <div class="node-latent">L${node.layer + 1}/${node.latentIdx + 1}</div>
+            <div class="node-latent">${label}</div>
             ${node.name ? `<div class="node-name">${node.name}</div>` : ''}
         `;
     }
@@ -2308,8 +2984,23 @@ document.addEventListener('keydown', (e) => {
 // Virtual Weights Visualization (Grid-based)
 // ============================================
 
-// Position offset control
-function displayPos(pos) { return pos + 1 + positionOffset; }
+// Position offset control.
+// In CLM/GLM mode the marker is one logical slot but is rendered as N grid columns
+// (one per generated token). logicalPos collapses generated columns onto the marker
+// and shifts post-marker columns back, so positions match activation_indices.json.
+function logicalPos(i) {
+    if (analysisType !== 'CLM' || numGenerated <= 0) return i;
+    if (i < clmStart) return i;
+    if (i < clmStart + numGenerated) return clmStart;
+    return i - (numGenerated - 1);
+}
+function displayPos(pos) {
+    if (analysisType === 'CLM' && numGenerated > 0 &&
+        pos >= clmStart && pos < clmStart + numGenerated) {
+        return pos + 1 + positionOffset;
+    }
+    return logicalPos(pos) + 1 + positionOffset;
+}
 
 const offsetInput = document.getElementById('offset-input');
 offsetInput.addEventListener('input', () => {
@@ -2382,6 +3073,16 @@ edgeThresholdInput.addEventListener('blur', () => {
 
 // Find latent box element in grid by layer, position, and feature
 function findLatentBox(layer, pos, feature) {
+    // lgt layer: target specific token box if it's in the visible top-2,
+    // otherwise fall back to the lgt cell itself.
+    const numLayers = getNumLayers();
+    if (analysisType === 'CLM' && layer === numLayers) {
+        const tokenBox = gridBody.querySelector(
+            `.logit-box[data-layer="lgt"][data-pos="${pos}"][data-token-idx="${feature}"]`
+        );
+        if (tokenBox) return tokenBox;
+        return gridBody.querySelector(`.grid-cell[data-layer="lgt"][data-pos="${pos}"]`);
+    }
     const selector = `.latent-box[data-layer="${layer}"][data-pos="${pos}"][data-latent="${feature}"]`;
     return gridBody.querySelector(selector);
 }
@@ -2405,17 +3106,38 @@ function renderVirtualWeightsInGrid() {
 
     if (!virtualWeightsData || virtualWeightsData.length === 0) return;
 
-    // Filter edges based on threshold (top x% by absolute magnitude)
-    let edgesToRender = virtualWeightsData;
-    if (virtualWeightsThreshold < 100) {
-        // Sort by absolute weight magnitude (descending)
-        const sortedEdges = [...virtualWeightsData].sort((a, b) =>
-            Math.abs(b[6]) - Math.abs(a[6])
-        );
-        // Calculate how many edges to keep
-        const numToKeep = Math.ceil(sortedEdges.length * virtualWeightsThreshold / 100);
-        edgesToRender = sortedEdges.slice(0, numToKeep);
+    // Split edges: those targeting the lgt layer get a separate top-5-per-position cap
+    // (real CLM data will have many srcs per logit, so we never want to flood the grid).
+    const numLayers = getNumLayers();
+    const lgtEdges = [];
+    const otherEdges = [];
+    for (const e of virtualWeightsData) {
+        if (analysisType === 'CLM' && e[4] === numLayers) lgtEdges.push(e);
+        else otherEdges.push(e);
     }
+
+    // Apply the % threshold to non-lgt edges (existing behaviour)
+    let filteredOther = otherEdges;
+    if (virtualWeightsThreshold < 100 && otherEdges.length) {
+        const sorted = [...otherEdges].sort((a, b) => Math.abs(b[6]) - Math.abs(a[6]));
+        const numToKeep = Math.ceil(sorted.length * virtualWeightsThreshold / 100);
+        filteredOther = sorted.slice(0, numToKeep);
+    }
+
+    // Cap lgt edges at top-5 per <CLM> position by absolute weight
+    const byLgtPos = new Map();
+    for (const e of lgtEdges) {
+        const tgtPos = e[3];
+        if (!byLgtPos.has(tgtPos)) byLgtPos.set(tgtPos, []);
+        byLgtPos.get(tgtPos).push(e);
+    }
+    const cappedLgt = [];
+    for (const arr of byLgtPos.values()) {
+        arr.sort((a, b) => Math.abs(b[6]) - Math.abs(a[6]));
+        cappedLgt.push(...arr.slice(0, 5));
+    }
+
+    const edgesToRender = filteredOther.concat(cappedLgt);
 
     // Find min/max weight for edge thickness scaling (from filtered edges)
     let minWeight = Infinity, maxWeight = -Infinity;
@@ -2651,11 +3373,14 @@ gridBody.addEventListener('contextmenu', (e) => {
 
     e.preventDefault();
 
-    const layer = parseInt(latentBox.dataset.layer);
+    const isLogit = latentBox.classList.contains('logit-box');
     const pos = parseInt(latentBox.dataset.pos);
-    const latentIdx = parseInt(latentBox.dataset.latent);
     const value = parseFloat(latentBox.dataset.value);
-    const aa = sequence[pos];
+    const layer = isLogit ? getNumLayers() : parseInt(latentBox.dataset.layer);
+    const latentIdx = isLogit
+        ? parseInt(latentBox.dataset.tokenIdx)
+        : parseInt(latentBox.dataset.latent);
+    const aa = isLogit ? vocabToken(latentIdx) : sequence[pos];
 
     contextMenuTarget = latentBox;
     contextMenuTargetType = 'latent-box';
@@ -2847,10 +3572,6 @@ document.getElementById('btn-guide').addEventListener('click', () => {
     videoPopup.classList.remove('hidden');
 });
 
-document.getElementById('btn-arxiv').addEventListener('click', () => {
-    window.open('https://arxiv.org/pdf/2602.12026', '_blank');
-});
-
 document.getElementById('btn-github').addEventListener('click', () => {
     window.open('https://github.com/amirgroup-codes/ProtoMech/tree/main', '_blank');
 });
@@ -2863,4 +3584,16 @@ function closeVideoPopup() {
 document.getElementById('video-popup-close').addEventListener('click', closeVideoPopup);
 videoPopup.addEventListener('click', (e) => {
     if (e.target === videoPopup) closeVideoPopup();
+});
+
+// Paper links popup
+const paperPopup = document.getElementById('paper-popup');
+document.getElementById('btn-arxiv').addEventListener('click', () => {
+    paperPopup.classList.remove('hidden');
+});
+document.getElementById('paper-popup-close').addEventListener('click', () => {
+    paperPopup.classList.add('hidden');
+});
+paperPopup.addEventListener('click', (e) => {
+    if (e.target === paperPopup) paperPopup.classList.add('hidden');
 });

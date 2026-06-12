@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "timestamp": "2026-01-24T21:51:58.535Z",
+  "nodeIdCounter": 6,
+  "edgeIdCounter": 10,
+  "canvasNodes": [
+    {
+      "id": 1,
+      "x": 657,
+      "y": 64,
+      "latentIdx": 1108,
+      "layer": 4,
+      "pos": 147,
+      "aa": "V",
+      "value": 2.44,
+      "isSuper": false,
+      "children": [],
+      "name": "NADP+/FAD binding"
+    },
+    {
+      "id": 2,
+      "x": 503,
+      "y": 205,
+      "latentIdx": 966,
+      "layer": 0,
+      "pos": 51,
+      "aa": "F",
+      "value": 10.4,
+      "isSuper": false,
+      "children": [],
+      "name": "F amino acids"
+    },
+    {
+      "id": 3,
+      "x": 507,
+      "y": 13,
+      "latentIdx": 2197,
+      "layer": 5,
+      "pos": 51,
+      "aa": "F",
+      "value": 9.52,
+      "isSuper": false,
+      "children": [],
+      "name": "F amino acids"
+    },
+    {
+      "id": 4,
+      "x": 313,
+      "y": 64,
+      "latentIdx": 1337,
+      "layer": 4,
+      "pos": 42,
+      "aa": "L",
+      "value": 4.68,
+      "isSuper": false,
+      "children": [],
+      "name": "NADP+ binding sites"
+    },
+    {
+      "id": 5,
+      "x": 302,
+      "y": 158,
+      "latentIdx": 52,
+      "layer": 3,
+      "pos": 37,
+      "aa": "D",
+      "value": 1.35,
+      "isSuper": false,
+      "children": [],
+      "name": "Rossman fold binding sites"
+    }
+  ],
+  "edges": []
+}

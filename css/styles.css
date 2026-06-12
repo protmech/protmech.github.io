@@ -179,6 +179,26 @@ body {
     box-shadow: 0 0 0 2px rgba(0, 136, 170, 0.2);
 }
 
+#analysis-dropdown {
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #1a1a2e;
+    background: #f9fafb;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    cursor: pointer;
+    outline: none;
+}
+
+#analysis-dropdown:hover {
+    border-color: #0088aa;
+}
+
+#analysis-dropdown:focus {
+    border-color: #0088aa;
+    box-shadow: 0 0 0 2px rgba(0, 136, 170, 0.2);
+}
+
 #example-dropdown {
     flex: 1;
     max-width: 500px;
@@ -364,6 +384,151 @@ body {
     transform: scale(1.1);
     box-shadow: 0 0 8px rgba(0, 0, 0, 0.2);
     z-index: 10;
+}
+
+/* CLM logit boxes — same shape as latent-box but show a token glyph */
+.logit-box {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-weight: 600;
+    min-width: 24px;
+    text-align: center;
+}
+
+/* The lgt row sits above Layer L; subtle accent so it stands apart */
+.layer-label-lgt {
+    font-style: italic;
+    color: #0088aa;
+    background: #f3fbfe;
+    border-bottom: 2px solid #0088aa;
+    cursor: default;
+}
+
+.grid-row-lgt {
+    background: #f8fcfe;
+    border-bottom: 2px solid #0088aa;
+}
+
+/* Generated tokens in the sequence bar — labelled <CLM> */
+.seq-item-generated .seq-aa {
+    color: #b8860b;
+    font-style: italic;
+    font-size: 11px;
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    letter-spacing: 0;
+}
+.seq-item-generated {
+    background: #fff8e1;
+}
+
+/* Logit detail panel */
+.logit-panel { padding: 12px 16px; }
+.logit-panel-context {
+    margin-bottom: 12px;
+    color: #374151;
+    font-size: 14px;
+}
+
+/* Logit panel tabs */
+.logit-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid #d1d5db;
+    margin-bottom: 12px;
+}
+.logit-tab {
+    background: transparent;
+    border: none;
+    padding: 8px 14px;
+    font-size: 13px;
+    color: #6b7280;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    font-family: inherit;
+}
+.logit-tab:hover { color: #0088aa; }
+.logit-tab.active {
+    color: #0088aa;
+    border-bottom-color: #0088aa;
+    font-weight: 600;
+}
+
+/* Clickable rank rows in the All-ranked table */
+tr.logit-row { cursor: pointer; }
+tr.logit-row:hover { background: rgba(0, 136, 170, 0.08); }
+.logit-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.logit-table th {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 1px solid #d1d5db;
+    color: #6b7280;
+    font-weight: 600;
+}
+.logit-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #f3f4f6;
+}
+.logit-rank { color: #6b7280; width: 36px; }
+.logit-token {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    font-weight: 700;
+    color: #0088aa;
+    width: 60px;
+}
+.logit-idx { color: #9ca3af; width: 50px; }
+.logit-value {
+    font-family: 'SF Mono', Menlo, Consolas, monospace;
+    width: 70px;
+    text-align: right;
+}
+.logit-bar-cell { width: 40%; }
+.logit-bar-track {
+    background: #f3f4f6;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.logit-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+}
+.logit-add-cell {
+    width: 1%;
+    white-space: nowrap;
+    padding: 2px 4px !important;
+    text-align: right;
+}
+.btn-add-logit-to-canvas {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 4px;
+    background: #533483;
+    color: #fff;
+    font-size: 11px;
+    font-weight: bold;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s, transform 0.1s;
+}
+.btn-add-logit-to-canvas:hover {
+    background: #6b44a8;
+    transform: scale(1.04);
+}
+
+/* Dropzone detected analysis indicator */
+#detected-analysis {
+    margin: 8px 0 0;
+    font-size: 13px;
+    color: #6b7280;
+    text-align: center;
+}
+#detected-analysis #detected-type {
+    font-weight: 600;
+    color: #374151;
 }
 
 /* Sequence Bar */
@@ -2114,6 +2279,91 @@ button:hover:not(:disabled) svg.lucide {
 
 #settings-popup-close:hover {
     color: #ef4444;
+}
+
+/* ============================================
+   Paper Links Popup
+   ============================================ */
+
+#paper-popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10001;
+}
+
+#paper-popup.hidden {
+    display: none;
+}
+
+#paper-popup-content {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 24px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    max-width: 400px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#paper-popup-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+#paper-popup-header h3 {
+    font-size: 18px;
+    color: #1a1a2e;
+    margin: 0;
+}
+
+#paper-popup-close {
+    background: none;
+    border: none;
+    color: #6b7280;
+    font-size: 28px;
+    cursor: pointer;
+    padding: 0 8px;
+    line-height: 1;
+}
+
+#paper-popup-close:hover {
+    color: #ef4444;
+}
+
+#paper-popup .paper-link {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    font-size: 15px;
+    color: #1a1a2e;
+    text-decoration: none;
+    background: #f9fafb;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+#paper-popup .paper-link:hover {
+    border-color: #0088aa;
+    background: #f0f9fb;
+    color: #0088aa;
+}
+
+#paper-popup .paper-link svg.lucide {
+    width: 18px;
+    height: 18px;
 }
 
 /* ============================================

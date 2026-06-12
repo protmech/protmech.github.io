@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "timestamp": "2026-05-07T15:52:03.112Z",
+  "nodeIdCounter": 5,
+  "edgeIdCounter": 8,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 232,
+      "y": 198,
+      "latentIdx": 2692,
+      "layer": 0,
+      "pos": 7,
+      "aa": "D",
+      "value": 6.78732442855835,
+      "isSuper": false,
+      "children": [],
+      "name": "D amino acids"
+    },
+    {
+      "id": 1,
+      "x": 398,
+      "y": 198,
+      "latentIdx": 1521,
+      "layer": 0,
+      "pos": 35,
+      "aa": "W",
+      "value": 8.11662769317627,
+      "isSuper": false,
+      "children": [],
+      "name": "W amino acids"
+    },
+    {
+      "id": 2,
+      "x": 256,
+      "y": 98,
+      "latentIdx": 2112,
+      "layer": 8,
+      "pos": 3,
+      "aa": "Q",
+      "value": 2.2985501289367676,
+      "isSuper": false,
+      "children": [],
+      "name": "Homodimer"
+    },
+    {
+      "id": 3,
+      "x": 399,
+      "y": 100,
+      "latentIdx": 3296,
+      "layer": 9,
+      "pos": 49,
+      "aa": "N",
+      "value": 11.326603889465332,
+      "isSuper": false,
+      "children": [],
+      "name": "Binding sites"
+    },
+    {
+      "id": 4,
+      "x": 284,
+      "y": 15,
+      "latentIdx": 224,
+      "layer": 9,
+      "pos": 50,
+      "aa": "Y",
+      "value": 11.946905136108398,
+      "isSuper": false,
+      "children": [],
+      "name": "Binding sites and stability residues"
+    }
+  ],
+  "edges": []
+}

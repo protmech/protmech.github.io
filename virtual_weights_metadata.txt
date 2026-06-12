@@ -1,0 +1,148 @@
+virtual_weights.json — file format
+==================================
+
+A `virtual_weights.json` file lives next to each example circuit (e.g.
+`examples/progen2/kinase_zeroshot/virtual_weights.json`). The file is a JSON
+array of edge tuples:
+
+    [
+      [srcPos, srcLayer, srcFeature, tgtPos, tgtLayer, tgtFeature, weight],
+      ...
+    ]
+
+Each tuple represents a single virtual-weight edge between two SAE latents
+(or, in CLM mode, between a latent and a logit slot — see below). All
+indexing is 0-based; the UI adds +1 (and the user's `positionOffset` from the
+Settings popup) only when displaying numbers.
+
+  Field         Type    Meaning
+  ------------  ------  ------------------------------------------------------
+  srcPos        int     Source amino-acid position (0..len(sequence)-1)
+  srcLayer      int     Source layer index (0..numLayers-1)
+  srcFeature    int     Source SAE latent index (0..numFeatures-1)
+  tgtPos        int     Target amino-acid position (0..len(sequence)-1)
+  tgtLayer      int     Target layer index (see analysis-specific rules below)
+  tgtFeature    int     Target feature index (see analysis-specific rules below)
+  weight        float   Signed edge weight; magnitude drives line thickness,
+                        sign drives colour (red = positive, blue = negative)
+
+
+Chunking (large files)
+----------------------
+
+GitHub blobs cap at 100 MB. `split_weights.py` walks `examples/` and, for any
+`virtual_weights.json` over 100 MB, splits it into ~50 MB shards plus a
+manifest:
+
+    virtual_weights_manifest.json   {"parts": N}
+    virtual_weights_part0.json
+    virtual_weights_part1.json
+    ...
+
+The loader tries the manifest first, then falls back to a single
+`virtual_weights.json`. Both layouts are transparent to the rest of the app.
+Run `python split_weights.py` after regenerating a large file before
+committing.
+
+
+Format A — zero-shot examples
+=============================
+
+Used by all examples whose `analysis` column in `examples/examples.csv` is
+`"zero-shot"` (e.g. `kinase_zeroshot`).
+
+  - `srcLayer` and `tgtLayer` are both in `[0, numLayers - 1]`.
+  - `srcLayer < tgtLayer` (edges flow from earlier to later layers).
+  - `srcFeature` and `tgtFeature` are SAE-latent indices (any non-negative
+    integer up to the SAE's feature count).
+  - `srcPos` and `tgtPos` may be the same or different positions.
+
+Display rules:
+
+  - The "Show virtual weights" toggle renders these edges directly on top of
+    the grid via SVG.
+  - The Settings → "Filter Virtual Weights" slider keeps the top X% of edges
+    by |weight|; the default is auto-tuned so at most ~1000 edges render.
+  - Clicking a latent box opens the right-side panel; the "Influences" tab
+    lists incoming/outgoing edges for that latent (averaged across positions
+    via `aggregatedVirtualWeights`).
+
+Example tuple:
+
+    [10, 2, 1982, 12, 5, 292, -0.264]
+
+Reads as: source latent `1983` (display) at Layer 3 / position 11
+contributes a weight of -0.264 to target latent `293` at Layer 6 /
+position 13.
+
+
+Format B — CLM examples
+=======================
+
+Used by examples whose `analysis` column is `"CLM"` (e.g. `kinase_clm`).
+
+CLM accepts every tuple shape that zero-shot does (latent → latent), plus a
+new edge class: latent → **logit slot**. The format is identical — only the
+*values* of `tgtLayer` and `tgtFeature` differ:
+
+  - `tgtLayer == numLayers`
+        — sentinel for the `lgt` (logits) row, which the UI renders above
+          Layer L. For a 10-layer model, `tgtLayer = 10`.
+  - `tgtPos`
+        — must be a position covered by the `<CLM>` placeholder in
+          `generation.fasta`. If `<CLM>` starts at `clmStart` and
+          `>generated_output` has `numGenerated` characters, the valid lgt
+          target positions are `[clmStart, clmStart + numGenerated - 1]`.
+  - `tgtFeature`
+        — the *token id* in `PROGEN2_VOCAB` (range `0..33`), identifying
+          which of the 34 logit slots this edge feeds. The same indexing is
+          used by `logits.npy`. Common ids:
+              11 = D    12 = E    14 = G    15 = H    21 = N
+              22 = O    25 = R    26 = S    31 = X
+        See `js/app.js` for the full `PROGEN2_VOCAB` array.
+
+Source side is unchanged: `srcLayer`, `srcPos`, `srcFeature` reference an SAE
+latent that exists in `activation_indices.json`.
+
+Display rules for lgt-targeted edges:
+
+  - **Top-5 cap per `<CLM>` position.** Real CLM circuits will have many
+    sources feeding each logit slot; the grid would be unreadable if all
+    edges drew at once. The renderer keeps only the five strongest edges per
+    `tgtPos` (by |weight|) when drawing on the grid. This cap is independent
+    of the global "Filter Virtual Weights" % slider, which only applies to
+    non-lgt edges.
+  - **Edge termination.** If the edge's `tgtFeature` is among the top-2
+    tokens displayed inside the lgt cell, the line lands on that specific
+    token box; otherwise it terminates at the lgt cell as a whole.
+  - **Drill-down.** Clicking a logit box opens the logits panel. The "All
+    ranked" tab lists every in-vocab token ranked by raw logit value;
+    clicking any row switches to an "Incoming → <token>" tab that shows the
+    *full* set of incoming edges for that exact `(tgtPos, lgt, tgtFeature)`
+    triple — including edges below the grid's top-5 cap, and including
+    edges to tokens that aren't in the cell's visible top-2.
+
+Example tuple (latent → logit):
+
+    [131, 9, 1537, 132, 10, 11, 6.50]
+
+Reads as: source latent `1538` (display) at Layer 10 / position 132 (the
+last prompt residue, display position 133) contributes a weight of +6.50
+to the logit for token id 11 (`D`) at the first generated position
+(internal 132 → display 133).
+
+
+Authoring tips
+==============
+
+  - Layers are 0-indexed in the file but 1-indexed in the UI; an edge
+    referencing `srcLayer = 6` will render as starting from "Layer 7".
+  - Latent ids are likewise 0-indexed; the box labelled `1538` in the grid
+    corresponds to `srcFeature = 1537` in the JSON.
+  - For CLM, every source latent referenced must exist in
+    `activation_indices.json` for that example, otherwise the renderer logs
+    a warning ("Could not find latent boxes for edge…") and skips the edge.
+  - When `<CLM>` is in the middle of the prompt, the generated tokens are
+    spliced *into* the prompt to form `fullSequence`. `tgtPos` should be a
+    fullSequence position (i.e., 0-based index into the displayed sequence,
+    not the prompt-without-marker).

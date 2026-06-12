@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "timestamp": "2026-05-07T03:21:56.093Z",
+  "nodeIdCounter": 6,
+  "edgeIdCounter": 9,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 277,
+      "y": 216,
+      "latentIdx": 933,
+      "layer": 0,
+      "pos": 6,
+      "aa": "F",
+      "value": 6.9120588302612305,
+      "isSuper": false,
+      "children": [],
+      "name": "F amino acids"
+    },
+    {
+      "id": 1,
+      "x": 389,
+      "y": 153,
+      "latentIdx": 1067,
+      "layer": 2,
+      "pos": 152,
+      "aa": "F",
+      "value": 2.3705356121063232,
+      "isSuper": false,
+      "children": [],
+      "name": "F amino acids"
+    },
+    {
+      "id": 2,
+      "x": 160,
+      "y": 104,
+      "latentIdx": 2365,
+      "layer": 3,
+      "pos": 152,
+      "aa": "F",
+      "value": 15.256673812866211,
+      "isSuper": false,
+      "children": [],
+      "name": "DFG motif detector"
+    },
+    {
+      "id": 3,
+      "x": 393,
+      "y": 71,
+      "latentIdx": 2069,
+      "layer": 6,
+      "pos": 133,
+      "aa": "I",
+      "value": 11.965412139892578,
+      "isSuper": false,
+      "children": [],
+      "name": "ATP binding site; HRD"
+    },
+    {
+      "id": 4,
+      "x": 300,
+      "y": 5,
+      "latentIdx": 1709,
+      "layer": 7,
+      "pos": 33,
+      "aa": "E",
+      "value": 4.409019470214844,
+      "isSuper": false,
+      "children": [],
+      "name": "N-lobe"
+    }
+  ],
+  "edges": []
+}

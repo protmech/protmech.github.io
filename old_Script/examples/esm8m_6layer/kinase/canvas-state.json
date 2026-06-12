@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "timestamp": "2026-01-24T21:55:20.287Z",
+  "nodeIdCounter": 5,
+  "edgeIdCounter": 9,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 353,
+      "y": 196,
+      "latentIdx": 1581,
+      "layer": 0,
+      "pos": 25,
+      "aa": "R",
+      "value": 10.76,
+      "isSuper": false,
+      "children": [],
+      "name": "R amino acids"
+    },
+    {
+      "id": 1,
+      "x": 452,
+      "y": 140,
+      "latentIdx": 1917,
+      "layer": 2,
+      "pos": 132,
+      "aa": "D",
+      "value": 33.85,
+      "isSuper": false,
+      "children": [],
+      "name": "HRD motif active site"
+    },
+    {
+      "id": 2,
+      "x": 204,
+      "y": 69,
+      "latentIdx": 825,
+      "layer": 4,
+      "pos": 11,
+      "aa": "L",
+      "value": 3.14,
+      "isSuper": false,
+      "children": [],
+      "name": "Glycine-rich loop"
+    },
+    {
+      "id": 3,
+      "x": 465,
+      "y": 65,
+      "latentIdx": 1773,
+      "layer": 4,
+      "pos": 21,
+      "aa": "G",
+      "value": 6.93,
+      "isSuper": false,
+      "children": [],
+      "name": "ATP-binding site"
+    },
+    {
+      "id": 4,
+      "x": 353,
+      "y": 3,
+      "latentIdx": 885,
+      "layer": 5,
+      "pos": 12,
+      "aa": "S",
+      "value": 12.18,
+      "isSuper": false,
+      "children": [],
+      "name": "S amino acids"
+    }
+  ],
+  "edges": []
+}

@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "timestamp": "2026-05-07T20:48:51.325Z",
+  "nodeIdCounter": 6,
+  "edgeIdCounter": 40,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 253,
+      "y": 222,
+      "latentIdx": 3182,
+      "layer": 0,
+      "pos": 126,
+      "aa": "R",
+      "value": 4.716363906860352,
+      "isSuper": false,
+      "children": [],
+      "name": "R amino acids"
+    },
+    {
+      "id": 1,
+      "x": 393,
+      "y": 151,
+      "latentIdx": 1753,
+      "layer": 1,
+      "pos": 131,
+      "aa": "R",
+      "value": 1.5246763229370117,
+      "isSuper": false,
+      "children": [],
+      "name": "R amino acids"
+    },
+    {
+      "id": 2,
+      "x": 116,
+      "y": 151,
+      "latentIdx": 1089,
+      "layer": 4,
+      "pos": 130,
+      "aa": "H",
+      "value": 15.025347709655762,
+      "isSuper": false,
+      "children": [],
+      "name": "Catalytic loop detector"
+    },
+    {
+      "id": 3,
+      "x": 368,
+      "y": 77,
+      "latentIdx": 2069,
+      "layer": 6,
+      "pos": 128,
+      "aa": "I",
+      "value": 6.006476402282715,
+      "isSuper": false,
+      "children": [],
+      "name": "ATP binding site; HRD"
+    },
+    {
+      "id": 4,
+      "x": 179,
+      "y": 75,
+      "latentIdx": 896,
+      "layer": 7,
+      "pos": 131,
+      "aa": "R",
+      "value": 7.5354180335998535,
+      "isSuper": false,
+      "children": [],
+      "name": "HRD motif detector"
+    },
+    {
+      "id": 5,
+      "x": 274,
+      "y": 10,
+      "latentIdx": 11,
+      "layer": 10,
+      "pos": 132,
+      "aa": "D",
+      "value": 8.5625,
+      "isSuper": false,
+      "children": [],
+      "name": ""
+    }
+  ],
+  "edges": []
+}

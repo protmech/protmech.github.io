@@ -13,7 +13,7 @@
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ProtoMech - Circuit tracing for proteins</title>
+    <title>Toward Circuit Tracing in Autoregressive Protein Language Models</title>
     <link rel="icon" type="image/png" sizes="32x32" href="img/favicon.png">
     <link rel="apple-touch-icon" sizes="180x180" href="img/favicon.png">
     <meta name="theme-color" content="#ffffff">
@@ -28,16 +28,20 @@
             <div class="dropzone-icon">📁</div>
             <h2>Drop Files Here</h2>
             <p class="dropzone-subtitle">or click to select files</p>
-            <input type="file" id="file-input" multiple accept=".json,.txt" />
+            <input type="file" id="file-input" multiple accept=".json,.fasta,.npy" />
             <div class="required-files">
                 <p>Required files:</p>
                 <div class="file-status" id="status-activation">
                     <span class="status-icon">○</span>
                     <span class="file-name">activation_indices.json</span>
                 </div>
-                <div class="file-status" id="status-seq">
+                <div class="file-status" id="status-fasta">
                     <span class="status-icon">○</span>
-                    <span class="file-name">seq.txt</span>
+                    <span class="file-name">generation.fasta</span>
+                </div>
+                <div class="file-status optional" id="status-logits">
+                    <span class="status-icon">○</span>
+                    <span class="file-name">logits.npy (optional, CLM/GLM only)</span>
                 </div>
                 <div class="file-status" id="status-top">
                     <span class="status-icon">○</span>
@@ -48,6 +52,7 @@
                     <span class="file-name">virtual_weights.json</span>
                 </div>
             </div>
+            <div id="detected-analysis" class="hidden">Detected: <span id="detected-type"></span></div>
             <button id="btn-load" disabled><i data-lucide="upload"></i> Load Data</button>
         </div>
     </div>
@@ -57,6 +62,7 @@
         <div id="example-selector">
             <img src="img/logo.png" alt="Protein Circuit Tracing" id="site-logo">
             <select id="model-dropdown"></select>
+            <select id="analysis-dropdown"></select>
             <select id="example-dropdown">
                 <option value="">Loading examples...</option>
             </select>
@@ -66,7 +72,7 @@
             <button id="btn-settings" title="Settings"><i data-lucide="settings"></i></button>
 
             <div id="selector-actions">
-                <button id="btn-arxiv" title="arXiv Paper">
+                <button id="btn-arxiv" title="Paper">
                     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/>
                         <path d="M9 10l2 2 4-4"/>
@@ -161,6 +167,18 @@
                 <iframe id="video-iframe" src="" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
             </div>
             <p class="video-colab-text">To generate the JSON files required for a new sequence, use this <a href="https://colab.research.google.com/github/amirgroup-codes/ProtoMech/blob/main/ProtoMech.ipynb" target="_blank" rel="noopener noreferrer">Google Colab Notebook</a>.</p>
+        </div>
+    </div>
+
+    <!-- Paper Links Popup -->
+    <div id="paper-popup" class="hidden">
+        <div id="paper-popup-content">
+            <div id="paper-popup-header">
+                <h3>Paper</h3>
+                <button id="paper-popup-close">&times;</button>
+            </div>
+            <a class="paper-link" href="https://arxiv.org/pdf/2602.12026" target="_blank" rel="noopener noreferrer"><i data-lucide="file-text"></i> ICML 2026 (arXiv PDF)</a>
+            <a class="paper-link" href="https://openreview.net/forum?id=9xHiruDoj7" target="_blank" rel="noopener noreferrer"><i data-lucide="external-link"></i> MechInterp Workshop, ICML 2026 (OpenReview)</a>
         </div>
     </div>
 

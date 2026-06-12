@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "timestamp": "2026-03-25T22:09:44.458Z",
+  "nodeIdCounter": 4,
+  "edgeIdCounter": 5,
+  "canvasNodes": [
+    {
+      "id": 0,
+      "x": 432,
+      "y": 168,
+      "latentIdx": 1177,
+      "layer": 0,
+      "pos": 22,
+      "aa": "W",
+      "value": 3.34454345703125,
+      "isSuper": false,
+      "children": [],
+      "name": "W binding site (now activates on W24)"
+    },
+    {
+      "id": 1,
+      "x": 288,
+      "y": 166,
+      "latentIdx": 1169,
+      "layer": 0,
+      "pos": 1,
+      "aa": "Y",
+      "value": 3.198521852493286,
+      "isSuper": false,
+      "children": [],
+      "name": "Y amino acids"
+    },
+    {
+      "id": 2,
+      "x": 383,
+      "y": 24,
+      "latentIdx": 4066,
+      "layer": 5,
+      "pos": 41,
+      "aa": "W",
+      "value": 2.613814353942871,
+      "isSuper": false,
+      "children": [],
+      "name": "Binding site"
+    },
+    {
+      "id": 3,
+      "x": 487,
+      "y": 78,
+      "latentIdx": 4201,
+      "layer": 3,
+      "pos": 24,
+      "aa": "A",
+      "value": 1.364181399345398,
+      "isSuper": false,
+      "children": [],
+      "name": "Inward facing residues"
+    }
+  ],
+  "edges": []
+}
