@@ -3572,10 +3572,6 @@ document.getElementById('btn-guide').addEventListener('click', () => {
     videoPopup.classList.remove('hidden');
 });
 
-document.getElementById('btn-github').addEventListener('click', () => {
-    window.open('https://github.com/amirgroup-codes/ProtoMech/tree/main', '_blank');
-});
-
 function closeVideoPopup() {
     videoPopup.classList.add('hidden');
     videoIframe.src = '';
@@ -3586,14 +3582,26 @@ videoPopup.addEventListener('click', (e) => {
     if (e.target === videoPopup) closeVideoPopup();
 });
 
-// Paper links popup
-const paperPopup = document.getElementById('paper-popup');
+// Paper/Code links depend on the selected model:
+//   ProGen3 examples -> ProGenMech (MechInterp Workshop, ICML 2026)
+//   ESM examples     -> ProtoMech (ICML 2026)
+function getProjectLinks() {
+    const isProGen = modelDropdown.value.includes('ProGen');
+    return isProGen
+        ? {
+            paper: 'https://openreview.net/pdf?id=9xHiruDoj7',
+            code: 'https://github.com/amirgroup-codes/ProGenMech'
+        }
+        : {
+            paper: 'https://arxiv.org/pdf/2602.12026',
+            code: 'https://github.com/amirgroup-codes/ProtoMech/tree/main'
+        };
+}
+
 document.getElementById('btn-arxiv').addEventListener('click', () => {
-    paperPopup.classList.remove('hidden');
+    window.open(getProjectLinks().paper, '_blank');
 });
-document.getElementById('paper-popup-close').addEventListener('click', () => {
-    paperPopup.classList.add('hidden');
-});
-paperPopup.addEventListener('click', (e) => {
-    if (e.target === paperPopup) paperPopup.classList.add('hidden');
+
+document.getElementById('btn-github').addEventListener('click', () => {
+    window.open(getProjectLinks().code, '_blank');
 });
